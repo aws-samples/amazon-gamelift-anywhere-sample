@@ -51,9 +51,10 @@ Frist you will need to build a game server.
 }
 
 ```
-   `GameLiftEndpoint` : GameLift endpoint where you want to deploy GameLift Anywhere fleet. [GameLift endpoints](https://docs.aws.amazon.com/general/latest/gr/gamelift.html)
-   `deploymentRegion` : Target region where you want to deploy GameLift Anywhere fleet.
-   `keyPairName` : Your ssh key pair name
+
+`GameLiftEndpoint` : GameLift endpoint where you want to deploy GameLift Anywhere fleet. [GameLift endpoints](https://docs.aws.amazon.com/general/latest/gr/gamelift.html)
+`deploymentRegion` : Target region where you want to deploy GameLift Anywhere fleet.
+`keyPairName` : Your ssh key pair name
 
 2. Copy game server binary and deploy AWS resources for Amazon GameLift Anywhere sample with following CDK command.
 
@@ -69,14 +70,14 @@ cdk synth
 
 # Deploy AWS resrouces
 cdk deploy
-
 ```
+
 You will need to manually approve the cdk deployment after `cdk deploy` command
 
 ## Demo scenarios
 
 1. Pre-requisites
- - Complete `Deploy AWS resources` step.
+ - Complete [Deploy AWS resources](https://github.com/aws-samples/amazon-gamelift-anywhere-sample/tree/main#deploy-aws-resources) step.
 
 
 2. Then register your server using aws gamelift register-compute command

@@ -126,7 +126,7 @@ func NewGlAnywereStack(scope constructs.Construct, id string, props *GlAnywereSt
 	})
 
 	// Create a GameLift Matchmaking Config resource
-	matchmaking_config_name := "AnywareDemoMatchmakingConfig" // GameLift MatchMakingConfigName
+	matchmaking_config_name := "AnywhereDemoMatchmakingConfig" // GameLift MatchMakingConfigName
 
 	matchmaking_config := awsgamelift.NewCfnMatchmakingConfiguration(stack, jsii.String("MatchmakingConfig"), &awsgamelift.CfnMatchmakingConfigurationProps{
 		AcceptanceRequired:    jsii.Bool(false),
