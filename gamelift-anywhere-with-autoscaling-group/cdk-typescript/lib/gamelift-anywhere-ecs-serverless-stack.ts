@@ -8,6 +8,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as fs from 'fs';
+import * as path from 'path';
 
 export class GameliftAnywhereEcsServerlessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -39,7 +40,7 @@ export class GameliftAnywhereEcsServerlessStack extends cdk.Stack {
     const matchmakingRulesetName = 'AnywhereDemoMatchmakingRule';
     const matchmakingRuleset = new gamelift.CfnMatchmakingRuleSet(this, 'MatchmakingRuleset', {
       name: matchmakingRulesetName,
-      ruleSetBody: fs.readFileSync('matchmaking_rule1.yaml', 'utf-8')
+      ruleSetBody: fs.readFileSync(path.join(__dirname, '..', 'matchmaking_rule1.yml'), 'utf-8')
     });
 
     // Create a GameLift Alias resource
@@ -51,9 +52,9 @@ export class GameliftAnywhereEcsServerlessStack extends cdk.Stack {
       }
     });
 
-    const aliasArn = `arn:aws:gamelift:${this.region}:${this.account}:alias/${alias.name}`;
+    const aliasArn = `arn:aws:gamelift:${this.region}:${this.account}:alias/${alias.attrAliasId}`;
     
-    const queue = new gamelift.CfnQueue(this, 'Queue', {
+    const queue = new gamelift.CfnGameSessionQueue(this, 'Queue', {
       name: 'anywhere-demo-queue',
       destinations: [{
         destinationArn: aliasArn
@@ -140,7 +141,7 @@ export class GameliftAnywhereEcsServerlessStack extends cdk.Stack {
       resources: [ '*' ]
     }));
 
-    const userData = ec2.UserData.custom(fs.readFileSync('user_data.txt', 'utf-8'));
+    const userData = ec2.UserData.custom(fs.readFileSync(path.join(__dirname, '..', 'user_data.txt'), 'utf-8'));
     const keyPairName = this.node.tryGetContext('keyPairName');
 
     const launchTemplate = new ec2.LaunchTemplate(this, 'LaunchTemplate', {
@@ -213,21 +214,9 @@ export class GameliftAnywhereEcsServerlessStack extends cdk.Stack {
         value:             this.node.tryGetContext('GameLiftEndpoint'),
         propagateAtLaunch: true,
       }, {
-        key:               'ConcurrentExecutions',
-        value:             this.node.tryGetContext('ConcurrentExecutions'),
-        propagateAtLaunch: true,
-      }, {
-        key:               'GameServerFromPort',
-        value:             this.node.tryGetContext('GameServerFromPort'),
-        propagateAtLaunch: true,
-      }, {
         key:               'Location',
         value:             locationName,
         propagateAtLaunch: true,
-      // }, {
-      //   key:               'EndpointGroupArn',
-      //   value:             "arn:aws:globalaccelerator::394254462122:accelerator/a0d118ed-8cb4-4953-a9ea-529dad865084/listener/e3fc6956/endpoint-group/c16bb882000e"),
-      //   propagateAtLaunch: true,
       }, {
         key:               'BucketName',
         value:             bucket.bucketName,

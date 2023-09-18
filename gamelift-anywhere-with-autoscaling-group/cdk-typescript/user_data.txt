@@ -1,0 +1,174 @@
+Content-Type: multipart/mixed; boundary="//"
+MIME-Version: 1.0
+
+--//
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="cloud-config.txt"
+
+#cloud-config
+packages: 
+ - golang
+
+cloud_final_modules:
+- [scripts-user, always]
+
+--//
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="userdata.txt"
+
+#!/bin/bash
+
+REGION=ap-northeast-2
+
+echo "Starting anywhere fleet game servers..."
+
+TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+
+
+num_instances=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/ConcurrentExecutions -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "# of Game Server instances: $num_instances"
+
+GameServerFromPort=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/GameServerFromPort -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "# of Game Server Ports starts from $GameServerFromPort"
+
+instance_id=`curl -s http://169.254.169.254/latest/meta-data/instance-id -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "Instance ID: $instance_id"
+
+fleet_id=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/FleetId -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "Fleet ID: $fleet_id"
+
+gamelift_endpoint=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/GameLiftEndpoint -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "GameLift Endpoint: $gamelift_endpoint"
+
+location=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/Location -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "Location: $location"
+
+mac=`curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs -H "X-aws-ec2-metadata-token: $TOKEN"`
+
+#private_ip=`curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/$mac/local-ipv4s -H "X-aws-ec2-metadata-token: $TOKEN"`
+#echo "private IP: $private_ip"
+
+public_ip=`curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/$mac/public-ipv4s -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "public IP: $public_ip"
+
+#result=`aws gamelift register-compute --compute-name $instance_id --fleet-id $fleet_id  --ip-address $private_ip --location $location --region $REGION`
+result=`aws gamelift register-compute --compute-name $instance_id --fleet-id $fleet_id  --ip-address $public_ip --location $location --region $REGION`
+echo "register-compute result: $result"
+
+subnet_id=`curl -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/$mac/subnet-id -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "subnet ID: $subnet_id"
+
+#endpoint_group_arn=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/EndpointGroupArn -H "X-aws-ec2-metadata-token: $TOKEN"`
+#echo "Endpoint Group ARN: $endpoint_group_arn"
+
+BucketName=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/BucketName -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "Bucket Name: $BucketName"
+
+AutoScalingGroupName=`curl -s http://169.254.169.254/latest/meta-data/tags/instance/AutoScalingGroupName -H "X-aws-ec2-metadata-token: $TOKEN"`
+echo "AutoScalingGroupName: $AutoScalingGroupName"
+
+GAMEBINARY_URI="s3://${BucketName}/gomoku-in-go"
+
+export AWS_CONFIG_FILE=/local/game/.aws/config
+
+GAMESERVER_PATH=/local/game/gomoku
+
+if [ -f "$GAMESERVER_PATH" ]; then
+  echo "$GAMESERVER_PATH exists. Run $GAMESERVER_PATH ... "
+else 
+  echo "$GAMESERVER_PATH not exists. Download game server binary from $GAMEBINARY_URI..."
+  aws s3 cp $GAMEBINARY_URI /tmp/gomoku-in-go
+  
+  if [ 0 -eq $? ]; then
+    mkdir -p /local/game/
+    mv /tmp/gomoku-in-go $GAMESERVER_PATH
+    chmod a+x $GAMESERVER_PATH
+  else
+    echo "game binary download failed." 
+    exit 0
+  fi
+
+  mkdir -p /local/game/.aws/
+  chmod a+w /local/game/.aws/
+  echo "[default]" > $AWS_CONFIG_FILE
+  echo "region=$REGION" >> $AWS_CONFIG_FILE
+fi
+
+
+gameserver_port=$GameServerFromPort
+
+pids=()
+serverPorts=()
+
+for i in $(eval echo "{0..$(expr $num_instances - 1)}")
+do
+  #result=`aws globalaccelerator allow-custom-routing-traffic --endpoint-group-arn $endpoint_group_arn --endpoint-id $subnet_id --destination-addresses $private_ip --destination-ports $gameserver_port --region us-west-2`
+  #echo "allow-custom-routing-traffic[$gameserver_port]  result: $result"
+
+  /local/game/gomoku --port $gameserver_port --endpoint $gamelift_endpoint --fleet-id $fleet_id  --host-id $instance_id & pids+=("$!")
+  serverPorts+=("$gameserver_port")
+  echo "PID[$i]: ${pids[$i]}, serverPorts[$i]: ${serverPorts[$i]}" 
+  gameserver_port=$(expr $gameserver_port + 1)
+  sleep 2
+done
+
+current_instance_scale_in_protection=0
+
+# Check if any process terminated and run the process again if so
+while true; do
+  instance_scale_in_protection=0
+
+  for i in $(eval echo "{0..$(expr $num_instances - 1)}")
+  do 
+    state_file=/tmp/${serverPorts[$i]}.state
+    if grep -q ACTIVE "$state_file"; then
+      instance_scale_in_protection=1
+    fi
+
+    if ps -p ${pids[$i]} > /dev/null
+    then
+      #echo "process(${pids[$i]}) is runnnig good" 
+      :
+    else 
+      echo "process is not running start the process again"
+      $GAMESERVER_PATH --port ${serverPorts[$i]} --endpoint $gamelift_endpoint --fleet-id $fleet_id  --host-id $instance_id & pids[$i]="$!" 
+      echo "PID[$i]: ${pids[$i]}, serverPorts[$i]: ${serverPorts[$i]}" 
+    fi
+    sleep 1
+  done
+
+  if [[ $instance_scale_in_protection -ne $current_instance_scale_in_protection ]]; then
+    if [[ "$instance_scale_in_protection" -eq 1 ]]
+    then
+      result=`aws autoscaling set-instance-protection --instance-ids $instance_id --auto-scaling-group-name $AutoScalingGroupName --protected-from-scale-in`
+    else
+      result=`aws autoscaling set-instance-protection --instance-ids $instance_id --auto-scaling-group-name $AutoScalingGroupName --no-protected-from-scale-in`
+    fi
+    echo "Changed instance protection state: $result"
+    current_instance_scale_in_protection=$instance_scale_in_protection
+  fi
+
+  TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+  target_state=`curl -s http://169.254.169.254/latest/meta-data/autoscaling/target-lifecycle-state -H "X-aws-ec2-metadata-token: $TOKEN"`
+  if [ "$target_state" == "Terminated" ]; then
+    echo "Target state changing to $target-state"
+    echo "Deregister this instance from Anywhere Fleet"
+
+    result=`aws gamelift deregister-compute --compute-name $instance_id --fleet-id $fleet_id --region $REGION`
+    echo "deregister-compute result: $result"
+
+    #for i in $(eval echo "{0..$(expr $num_instances - 1)}")
+    #  do
+    #    result=`aws globalaccelerator deny-custom-routing-traffic --endpoint-group-arn $endpoint_group_arn --endpoint-id $subnet_id --destination-addresses $private_ip --destination-ports ${serverPorts[$i]} --region us-west-2`
+    #    echo "deny-custom-routing-traffic[$i]  result: $result"
+    # done
+    sleep 30
+  fi
+done
+
+--//--
+
