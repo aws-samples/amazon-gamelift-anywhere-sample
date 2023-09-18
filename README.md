@@ -21,14 +21,14 @@ git clone https://github.com/aws-samples/amazon-gamelift-anywhere-sample.git
 ```
 cd amazon-gamelift-anywhere-sample
 wget https://gamelift-server-sdk-release.s3.us-west-2.amazonaws.com/go/GameLift-Go-ServerSDK-5.0.0.zip
-unzip GameLift-SDK-Release-5.0.0.zip
+unzip GameLift-Go-ServerSDK-5.0.0.zip
 ```
 
 3. Go to gomoku-game-server folder, copy GameLift-SDK for Go language, and build an executable. (Install golang if not yet installed)
 
 ```
 cd gomoku-game-server/
-cp -R ../GameLift-SDK-Release-5.0.0/GameLift-Go-ServerSDK-5.0.0 ./
+cp -R ../GameLift-Go-ServerSDK-5.0.0/ ./
 sudo yum install golang -y
 go mod tidy
 go build .
@@ -37,7 +37,7 @@ go build .
 ## Deploy AWS resources
 Frist you will need to build a game server.
 
-1. Update the `context` section in gamelift-anywhere-with-autoscaling-group/cdk/cdk.json accordingly. 
+1. Update the `context` section in `gamelift-anywhere-with-autoscaling-group/cdk/cdk.json` accordingly. 
 
 ```
 {
@@ -60,10 +60,13 @@ Frist you will need to build a game server.
 
 ```
 # Move to cdk directory
-cd ../gamelift-anywhere-with-autoscaling-group/cdk/
+cd ../gamelift-anywhere-with-autoscaling-group/cdk-typescript/
 
 # Copy game server binary to ./gamebinaries/ folder
 cp ../../gomoku-game-server/gomoku-in-go gamebinaries/
+
+# Install cdk application dependencies
+npm install
 
 # Generate and check CloudFormation template 
 cdk synth
