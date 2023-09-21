@@ -1,8 +1,8 @@
 {
-  "name": "gamelift-anywhere-ecs-serverless",
+  "name": "gamelift-anywhere",
   "version": "0.1.0",
   "bin": {
-    "gamelift-anywhere-ecs-serverless": "bin/gamelift-anywhere-ecs-serverless.js"
+    "gamelift-anywhere": "bin/gamelift-anywhere.js"
   },
   "scripts": {
     "build": "tsc",
