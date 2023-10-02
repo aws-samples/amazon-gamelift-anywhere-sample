@@ -29,6 +29,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export class GameliftAnywhereStack extends cdk.Stack {
+  public readonly vpc: ec2.Vpc;
+  
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -121,6 +123,7 @@ export class GameliftAnywhereStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'VPCId', {
       value: vpc.vpcId
     });
+    this.vpc = vpc;
 
     // Create a Security Group for instances in the anywhere fleet
     const sg = new ec2.SecurityGroup(this, 'SecurityGroup', {
