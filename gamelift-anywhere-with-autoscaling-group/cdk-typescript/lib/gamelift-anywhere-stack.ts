@@ -27,6 +27,8 @@ import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
 
 export class GameliftAnywhereStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -153,6 +155,139 @@ export class GameliftAnywhereStack extends cdk.Stack {
       value: bucket.bucketDomainName
     });
 
+    const cluster = new ecs.Cluster(this, "MyCluster", {
+      clusterName: 'ecs-gameserver-cluster',
+      containerInsights: false,
+      enableFargateCapacityProviders: false,
+      vpc: vpc
+    });
+
+    const logging = new ecs.AwsLogDriver({
+      streamPrefix: "ecs-logs"
+    });
+
+    // https://containers-cdk-react-amplify.ws.kabits.com/backend-containers-with-aws-cdk/creating-task/
+    //
+    const executionRolePolicy =  new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ['*'],
+      actions: [
+              "ecr:GetAuthorizationToken",
+              "ecr:BatchCheckLayerAvailability",
+              "ecr:GetDownloadUrlForLayer",
+              "ecr:BatchGetImage",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents",
+              "ecs:DescribeTasks",
+              "ec2:DescribeNetworkInterfaces",
+              "ecs:GetTaskProtection",
+              "ecs:UpdateTaskProtection",
+
+              "ssmmessages:CreateControlChannel",
+              "ssmmessages:CreateDataChannel",
+              "ssmmessages:OpenControlChannel",
+              "ssmmessages:OpenDataChannel"
+            ]
+    });
+
+    const fargateTaskDefinition = new ecs.FargateTaskDefinition(this, 'ApiTaskDefinition', {
+      memoryLimitMiB: 512,
+      cpu: 256,
+    });
+
+    fargateTaskDefinition.addToExecutionRolePolicy(executionRolePolicy);
+    fargateTaskDefinition.addToTaskRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ["*"],
+      actions: [
+        "gamelift:*",
+        "ecs:DescribeTasks",
+        "ec2:DescribeNetworkInterfaces",
+        "ecs:GetTaskProtection",
+        "ecs:UpdateTaskProtection",
+      ]
+    }));
+
+    const container = fargateTaskDefinition.addContainer("backend", {
+      // Use an image from Amazon ECR
+      image: ecs.ContainerImage.fromRegistry('018700324583.dkr.ecr.ap-northeast-2.amazonaws.com/gomoku'),
+      logging: ecs.LogDrivers.awsLogs({streamPrefix: 'ecs-logs'}),
+      environment: { 
+        'CLUSTER': cluster.clusterName,
+        'PORT' : '4000',
+        'LOCATION' : 'custom-anywhere-location',
+        'FLEET_ID' : fleet.attrFleetId,
+        'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint')
+      }
+      // ... other options here ...
+    });
+    
+    container.addPortMappings({
+      containerPort: 4000
+    }); 
+
+    const sg_service = new ec2.SecurityGroup(this, 'gomoku-demo-sg', { vpc: vpc });
+
+    sg_service.addIngressRule(ec2.Peer.ipv4('0.0.0.0/0'), ec2.Port.tcp(4000));
+
+    const service = new ecs.FargateService(this, 'gomoku', {
+      cluster,
+      taskDefinition: fargateTaskDefinition,
+      desiredCount: 1,
+      assignPublicIp: true,
+      securityGroups: [sg_service],
+      enableExecuteCommand: true
+    });
+  
+    // Setup AutoScaling policy
+    const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
+    /*
+    scaling.scaleToTrackCustomMetric()
+    scaling.scaleOnCpuUtilization('CpuScaling', {
+      targetUtilizationPercent: 50,
+      scaleInCooldown: Duration.seconds(60),
+      scaleOutCooldown: Duration.seconds(60)
+    });
+    */
+    /*
+    const taskrole = new iam.Role(this, `ecs-taskrole-${this.stackName}`, {
+      roleName: `ecs-taskrole-${this.stackName}`,
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
+    });
+    */
+
+
+/*
+    const ecrRepo = new ecr.Repository(this, 'ecrRepo', {
+      repositoryName: 'gomoku'
+    });
+*/
+
+/*
+    const taskDef = new ecs.FargateTaskDefinition(this, "taskDefinition", {
+      family: 'gomoku',
+      taskRole: taskrole
+    });
+
+    const baseImage = 'public.ecr.aws/amazonlinux/amazonlinux:2022'
+    const container = taskDef.addContainer('flask-app', {
+      image: ecs.ContainerImage.fromRegistry(baseImage),
+      memoryLimitMiB: 512,
+      cpu: 256,
+      logging
+    });
+
+
+
+    cluster.addCapacity('hello-web', {
+      instanceType: new ec2.InstanceType("t2.small"),
+      desiredCapacity: 1, // 초기 instance 생성 개수
+      maxCapacity: 2,
+      minCapacity: 1,
+      // vpcSubnets : default > all private subnets.
+    });
+*/
+/*
     // Create new IAM role for instances in the anywhere fleet
     const anywhereFleetRole = new iam.Role(this, 'anywhere_fleet_role', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
@@ -194,6 +329,11 @@ export class GameliftAnywhereStack extends cdk.Stack {
       httpEndpoint: true,
       instanceMetadataTags: true
     });
+
+
+
+
+
 
     // Create AutoScalingGroup for instances in the anywhere fleet
     const selection = vpc.selectSubnets({ subnetType: ec2.SubnetType.PUBLIC });
@@ -305,5 +445,6 @@ export class GameliftAnywhereStack extends cdk.Stack {
     //   targetValue: 0.7,
     //   customMetric: targetMetrics
     // });
+*/
   }
 }
