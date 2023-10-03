@@ -20,6 +20,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as gamelift from 'aws-cdk-lib/aws-gamelift';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -28,11 +29,17 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as fs from 'fs';
 import * as path from 'path';
 
+interface StackProps extends cdk.StackProps {
+  vpc: ec2.Vpc;
+}
+
 export class GameliftAnywhereStack extends cdk.Stack {
-  public readonly vpc: ec2.Vpc;
-  
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  public readonly matchmakerNotificationTopic: sns.Topic;
+
+  constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
+
+    const vpc = props.vpc;
 
     // Create GameLift a Location resource for an autoscaling group
     const locationName = 'custom-anywhere-location';
@@ -100,6 +107,9 @@ export class GameliftAnywhereStack extends cdk.Stack {
       }
     });
 
+    const matchmakingNotificationTopic = new sns.Topic(this, 'MatchmakingNotificationTopic');
+    this.matchmakerNotificationTopic = matchmakingNotificationTopic;
+
     // Create a GameLift Matchmaking Config resource
     const matchmakingConfigName = 'AnywhereDemoMatchmakingConfig';
     const matchmakingConfig = new gamelift.CfnMatchmakingConfiguration(this, 'MatchmakingConfig', {
@@ -112,18 +122,11 @@ export class GameliftAnywhereStack extends cdk.Stack {
       description: matchmakingConfigName,
       flexMatchMode: 'WITH_QUEUE',
       gameSessionQueueArns: [queue.attrArn],
-      // notificationTarget: 'notificationTarget'
+      notificationTarget: matchmakingNotificationTopic.topicArn
     });
 
     // Add dependencies for the MatchMakingConfig to queue
     matchmakingConfig.addDependency(matchmakingRuleset);
-
-    // Create a VPC for Gamelift anywhere fleet
-    const vpc = new ec2.Vpc(this, 'AnywhereVPC');
-    new cdk.CfnOutput(this, 'VPCId', {
-      value: vpc.vpcId
-    });
-    this.vpc = vpc;
 
     // Create a Security Group for instances in the anywhere fleet
     const sg = new ec2.SecurityGroup(this, 'SecurityGroup', {

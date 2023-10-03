@@ -31,6 +31,7 @@ import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
+  matchmakerNotificationTopic: sns.Topic;
 }
 
 export class ServerlessBackendStack extends cdk.Stack {
@@ -119,13 +120,6 @@ export class ServerlessBackendStack extends cdk.Stack {
       eventSourceArn: gameResultQueue.queueArn
     });
 
-    // SNS topic that receive matchmaking event from FlexMatch configuration
-    const gomokuMatchmakingTopic = new sns.Topic(this, 'GomokuMatchTopic');
-
-    new cdk.CfnOutput(this, 'GameLiftEventTopicArn', {
-      value: gomokuMatchmakingTopic.topicArn
-    });
-
     // Lambda function that handles the matchmaking event messages and matchmaked result for future reference
     const gameMatchEvent = new lambda.Function(this, 'GameMatchEvent', {
       code: codeAsset,
@@ -137,7 +131,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     });
     table.grantWriteData(gameMatchEvent);
 
-    gomokuMatchmakingTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
+    props.matchmakerNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
 
     // Lambda layer that support python redis module
     const redisLayer = new lambda.LayerVersion(this, 'GameRankRedisLayer', {
