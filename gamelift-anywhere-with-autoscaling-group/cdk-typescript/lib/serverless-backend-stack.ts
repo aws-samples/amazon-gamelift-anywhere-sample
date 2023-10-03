@@ -24,7 +24,6 @@ import * as ddb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as elasticache from 'aws-cdk-lib/aws-elasticache';
 import * as sqs  from 'aws-cdk-lib/aws-sqs';
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
@@ -37,6 +36,8 @@ interface StackProps extends cdk.StackProps {
 export class ServerlessBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
+
+    const matchmakerConfigurationName = this.node.tryGetContext('matchmakerConfigurationName');
 
     // DynamoDB for player info
     const table = new ddb.Table(this, 'GomokuPlayerInfo', {
@@ -181,7 +182,12 @@ export class ServerlessBackendStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS // this is also the default
-      }    
+      },
+      cloudWatchRole: true,
+      cloudWatchRoleRemovalPolicy: cdk.RemovalPolicy.DESTROY,
+      deployOptions: {
+        loggingLevel: apigateway.MethodLoggingLevel.INFO
+      }
     });
 
     new cdk.CfnOutput(this, 'ApiGatewayEndpoint', {
@@ -203,7 +209,13 @@ export class ServerlessBackendStack extends cdk.Stack {
     });
 
     const rankingApi = gomokuApi.root.addResource('ranking');
-    rankingApi.addMethod('GET', new apigateway.LambdaIntegration(gameRankReader));
+    rankingApi.addMethod('GET', new apigateway.LambdaIntegration(gameRankReader, {
+      proxy: false,
+      integrationResponses: [{ statusCode: '200', }],
+      contentHandling:  apigateway.ContentHandling.CONVERT_TO_TEXT
+    }), {
+      methodResponses: [{ statusCode: '200' }]
+    });
 
     // Lambda function for API Gateway that make a matchmaking request to FlexMatch configuration
     // it initialize dynamodb table record for the player and request a matchmaking
@@ -213,14 +225,20 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'post-match-making.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: 'GomokuMatchConfig',
+        MATCHMAKING_CONFIGURATION_NAME: matchmakerConfigurationName
       }
     });
     table.grantReadWriteData(gameMatchRequest);
     gameMatchRequest.role?.addManagedPolicy(gameLiftFullAccessPolicy);
 
     const matchrequestApi = gomokuApi.root.addResource('matchrequest');
-    matchrequestApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchRequest));
+    matchrequestApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchRequest, {
+      proxy: false,
+      integrationResponses: [{ statusCode: '200', }],
+      contentHandling:  apigateway.ContentHandling.CONVERT_TO_TEXT
+    }), {
+      methodResponses: [{ statusCode: '200' }]
+    });
 
     // Lambda function for API Gateway that read matchmaking status that is updated in dynamodb table
     const gameMatchStatus = new lambda.Function(this, 'GameMatchStatus', {
@@ -229,12 +247,18 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'check-matchmaking-status.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: 'GomokuMatchConfig',
+        MATCHMAKING_CONFIGURATION_NAME: matchmakerConfigurationName
       }
     });
     table.grantReadWriteData(gameMatchStatus);
 
     const matchstatusApi = gomokuApi.root.addResource('matchstatus');
-    matchstatusApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchStatus));
+    matchstatusApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchStatus, {
+      proxy: false,
+      integrationResponses: [{ statusCode: '200', }],
+      contentHandling:  apigateway.ContentHandling.CONVERT_TO_TEXT
+    }), {
+      methodResponses: [{ statusCode: '200' }]
+    });
   }
 }
