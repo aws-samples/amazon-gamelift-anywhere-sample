@@ -1,12 +1,17 @@
 import redis
 import os
+import logging
+
+logger = logging.getLogger()
+
+logger.setLevel(logging.DEBUG)
 
 redis_host = os.getenv('REDIS')
 redis = redis.Redis(host=redis_host, db=0)
 
 def lambda_handler(event, context):
     for record in event['Records']:
-        print(record)
+        logger.debug(record)
         playerName = record['dynamodb']['Keys']['PlayerName']['S']
 
         if record['eventName'] == "REMOVE":

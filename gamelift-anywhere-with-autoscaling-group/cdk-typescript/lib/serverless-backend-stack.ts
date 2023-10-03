@@ -23,14 +23,16 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ddb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as elasticache from 'aws-cdk-lib/aws-elasticache';
-import * as sqs  from 'aws-cdk-lib/aws-sqs';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as gamelift from 'aws-cdk-lib/aws-gamelift';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
+  matchmakingConfiguration: gamelift.CfnMatchmakingConfiguration;
   matchmakerNotificationTopic: sns.Topic;
 }
 
@@ -38,12 +40,11 @@ export class ServerlessBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
-    const matchmakerConfigurationName = this.node.tryGetContext('matchmakerConfigurationName');
-
     // DynamoDB for player info
     const table = new ddb.Table(this, 'GomokuPlayerInfo', {
       tableName: 'GomokuPlayerInfo',
       partitionKey: { name: 'PlayerName', type: ddb.AttributeType.STRING },
+      timeToLiveAttribute: 'ExpireAt',
       billingMode: ddb.BillingMode.PAY_PER_REQUEST,
       stream: ddb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY
@@ -70,7 +71,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       engineVersion: '6.2',
       numCacheNodes: 1,
       cacheSubnetGroupName: rankingRedisSubnetGroup.ref,
-      vpcSecurityGroupIds: [ defaultSG.securityGroupId ],
+      vpcSecurityGroupIds: [defaultSG.securityGroupId],
     });
 
     new cdk.CfnOutput(this, 'RedisEndpoint', {
@@ -109,7 +110,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'process-game-result.lambda_handler',
       environment: {
-        TABLE_NAME: table.tableName,
+        TABLE_NAME: table.tableName
       },
       timeout: cdk.Duration.seconds(3),
     });
@@ -126,7 +127,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'handle-matchmaking-event.lambda_handler',
       environment: {
-        TABLE_NAME: table.tableName,
+        TABLE_NAME: table.tableName
       }
     });
     table.grantWriteData(gameMatchEvent);
@@ -150,14 +151,14 @@ export class ServerlessBackendStack extends cdk.Stack {
     const gameRankUpdate = new lambda.Function(this, 'GameRankUpdate', {
       code: codeAsset,
       runtime: lambda.Runtime.PYTHON_3_11,
-      layers: [ redisLayer ],
+      layers: [redisLayer],
       handler: 'update-player-ranking.lambda_handler',
       environment: {
         REDIS: rankingRedis.attrRedisEndpointAddress
       },
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [ defaultSG ]
+      securityGroups: [defaultSG]
     });
     table.grantStreamRead(gameRankUpdate);
 
@@ -171,7 +172,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     const gomokuApi = new apigateway.RestApi(this, 'GomokuAPI', {
       restApiName: 'GomokuAPI',
       endpointConfiguration: {
-        types: [ apigateway.EndpointType.REGIONAL ]
+        types: [apigateway.EndpointType.REGIONAL]
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
@@ -192,21 +193,21 @@ export class ServerlessBackendStack extends cdk.Stack {
     const gameRankReader = new lambda.Function(this, 'GameRankReader', {
       code: codeAsset,
       runtime: lambda.Runtime.PYTHON_3_11,
-      layers: [ redisLayer ],
+      layers: [redisLayer],
       handler: 'read-player-ranking.lambda_handler',
       environment: {
         REDIS: rankingRedis.attrRedisEndpointAddress
       },
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [ defaultSG ]
+      securityGroups: [defaultSG]
     });
 
     const rankingApi = gomokuApi.root.addResource('ranking');
     rankingApi.addMethod('GET', new apigateway.LambdaIntegration(gameRankReader, {
       proxy: false,
       integrationResponses: [{ statusCode: '200', }],
-      contentHandling:  apigateway.ContentHandling.CONVERT_TO_TEXT
+      contentHandling: apigateway.ContentHandling.CONVERT_TO_TEXT
     }), {
       methodResponses: [{ statusCode: '200' }]
     });
@@ -219,7 +220,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'post-match-making.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: matchmakerConfigurationName
+        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration.name
       }
     });
     table.grantReadWriteData(gameMatchRequest);
@@ -229,7 +230,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     matchrequestApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchRequest, {
       proxy: false,
       integrationResponses: [{ statusCode: '200', }],
-      contentHandling:  apigateway.ContentHandling.CONVERT_TO_TEXT
+      contentHandling: apigateway.ContentHandling.CONVERT_TO_TEXT
     }), {
       methodResponses: [{ statusCode: '200' }]
     });
@@ -241,7 +242,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'check-matchmaking-status.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: matchmakerConfigurationName
+        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration.name
       }
     });
     table.grantReadWriteData(gameMatchStatus);
@@ -250,7 +251,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     matchstatusApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchStatus, {
       proxy: false,
       integrationResponses: [{ statusCode: '200', }],
-      contentHandling:  apigateway.ContentHandling.CONVERT_TO_TEXT
+      contentHandling: apigateway.ContentHandling.CONVERT_TO_TEXT
     }), {
       methodResponses: [{ statusCode: '200' }]
     });

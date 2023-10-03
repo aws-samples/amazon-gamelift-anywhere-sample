@@ -16,5 +16,6 @@ const gameliftAnywhereStack = new GameliftAnywhereStack(app, 'GameliftAnywhereSt
 const serverlessBackendStack = new ServerlessBackendStack(app, 'ServerlessBackendStack', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
   vpc: vpcStack.vpc,
+  matchmakingConfiguration: gameliftAnywhereStack.matchmakingConfig,
   matchmakerNotificationTopic: gameliftAnywhereStack.matchmakerNotificationTopic
 });

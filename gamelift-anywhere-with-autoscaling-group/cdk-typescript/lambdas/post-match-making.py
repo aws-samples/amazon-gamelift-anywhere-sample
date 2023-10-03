@@ -3,6 +3,11 @@ import sys
 import json
 import decimal
 import os
+import logging
+
+logger = logging.getLogger()
+
+logger.setLevel(logging.DEBUG)
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -25,36 +30,26 @@ ddb_table = dynamodb.Table(table_name)
 
 def lambda_handler(event, context):
     playerName = event['PlayerName']
-    playerPass = event['PlayerPass']
     playerScore = -1
     
     result = ddb_table.get_item( Key= { 'PlayerName' : playerName } )
 
     if 'Item' not in result:
         # Create Item
-        ddb_table.put_item( Item={ 'PlayerName' : playerName, 'Password' : playerPass, 'Score' : 1000, 'Win' : 0, 'Lose' : 0 })
-        result = ddb_table.get_item( Key= { 'PlayerName' : playerName } )
+        ddb_table.put_item( Item={ 'PlayerName' : playerName, 'Score' : 1000, 'Win' : 0, 'Lose' : 0 } )
         playerScore = 1000
-    elif result['Item']['Password'] != playerPass:
-        print(result)
-        return { 'TicketId' : 'AuthError' }
-    
-    playerScore = result['Item']['Score']
-    playerAttr = {'score': {'N': int(playerScore) }}
+    else:
+        playerScore = result['Item']['Score']
+
+    playerAttr = { 'score': { 'N': int(playerScore) } }
     
     # Auth OK, Match Request Go
-    try:
-        match_response = gamelift.start_matchmaking(
-            ConfigurationName=matchmaking_configuration_name,
-            Players = [ { 'PlayerId' : playerName, 'PlayerAttributes' : playerAttr } ]
-        )
-    except TypeError as e:
-        print(e)
-        return { 'TicketId' : 'MatchError' }
-    except:
-        print(sys.exc_info()[0])
-        return { 'TicketId' : 'MatchError' }
+    match_response = gamelift.start_matchmaking(
+        ConfigurationName=matchmaking_configuration_name,
+        Players = [ { 'PlayerId' : playerName, 'PlayerAttributes' : playerAttr } ]
+    )
 
+    logger.debug(match_response)
     ticketId = match_response['MatchmakingTicket']['TicketId']
 
     return { 'TicketId' : ticketId }

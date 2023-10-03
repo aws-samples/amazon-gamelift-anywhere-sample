@@ -34,6 +34,7 @@ interface StackProps extends cdk.StackProps {
 }
 
 export class GameliftAnywhereStack extends cdk.Stack {
+  public readonly matchmakingConfig: gamelift.CfnMatchmakingConfiguration;
   public readonly matchmakerNotificationTopic: sns.Topic;
 
   constructor(scope: Construct, id: string, props: StackProps) {
@@ -124,6 +125,7 @@ export class GameliftAnywhereStack extends cdk.Stack {
       gameSessionQueueArns: [queue.attrArn],
       notificationTarget: matchmakingNotificationTopic.topicArn
     });
+    this.matchmakingConfig = matchmakingConfig;
 
     // Add dependencies for the MatchMakingConfig to queue
     matchmakingConfig.addDependency(matchmakingRuleset);

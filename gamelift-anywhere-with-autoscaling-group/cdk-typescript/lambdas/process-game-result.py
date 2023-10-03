@@ -2,6 +2,11 @@ import boto3
 import json
 import decimal
 import os
+import logging
+
+logger = logging.getLogger()
+
+logger.setLevel(logging.DEBUG)
 
 # Helper class to convert a DynamoDB item to JSON.
 class DecimalEncoder(json.JSONEncoder):
@@ -20,7 +25,7 @@ dynamodb = boto3.resource('dynamodb', region_name=region_name)
 ddb_table = dynamodb.Table(table_name)
 
 def lambda_handler(event, context):
-    print(event)
+    logger.debug(event)
     for record in event['Records']:
         parsed = json.loads(record['body'])
         playerName = parsed['PlayerName']
