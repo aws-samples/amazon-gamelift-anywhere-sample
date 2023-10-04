@@ -33,7 +33,7 @@ interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
 }
 
-export class GameliftAnywhereStack extends cdk.Stack {
+export class GameLiftAnywhereStack extends cdk.Stack {
   public readonly matchmakingConfig: gamelift.CfnMatchmakingConfiguration;
   public readonly matchmakerNotificationTopic: sns.Topic;
 
