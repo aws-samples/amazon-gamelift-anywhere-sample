@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { GameliftAnywhereStack } from '../lib/gamelift-anywhere-stack';
+import { VpcStack } from '../lib/vpc-stack';
+import { ServerlessBackendStack } from '../lib/serverless-backend-stack';
+import { GameLiftAnywhereStack } from '../lib/gamelift-anywhere-stack';
 
 const app = new cdk.App();
-new GameliftAnywhereStack(app, 'GameliftAnywhereStack', {
-  /* If you don't specify 'env', this stack will be environment-agnostic.
-   * Account/Region-dependent features and context lookups will not work,
-   * but a single synthesized template can be deployed anywhere. */
-
-  /* Uncomment the next line to specialize this stack for the AWS Account
-   * and Region that are implied by the current CLI configuration. */
+const vpcStack = new VpcStack(app, 'VpcStack', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
-
-  /* Uncomment the next line if you know exactly what Account and Region you
-   * want to deploy the stack to. */
-  // env: { account: '123456789012', region: 'us-east-1' },
-
-  /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
+});
+const gameliftAnywhereStack = new GameLiftAnywhereStack(app, 'GameLiftAnywhereStack', {
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
+  vpc: vpcStack.vpc,
+});
+const serverlessBackendStack = new ServerlessBackendStack(app, 'ServerlessBackendStack', {
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
+  vpc: vpcStack.vpc,
+  matchmakingConfiguration: gameliftAnywhereStack.matchmakingConfig,
+  matchmakerNotificationTopic: gameliftAnywhereStack.matchmakerNotificationTopic
 });
