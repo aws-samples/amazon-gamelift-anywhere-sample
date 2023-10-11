@@ -32,8 +32,8 @@ import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
-  matchmakingConfiguration: gamelift.CfnMatchmakingConfiguration;
-  matchmakerNotificationTopic: sns.Topic;
+  matchmakingConfiguration?: gamelift.CfnMatchmakingConfiguration;
+  matchmakerNotificationTopic?: sns.Topic;
 }
 
 export class ServerlessBackendStack extends cdk.Stack {
@@ -132,7 +132,9 @@ export class ServerlessBackendStack extends cdk.Stack {
     });
     table.grantWriteData(gameMatchEvent);
 
-    props.matchmakerNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
+    if (props.matchmakerNotificationTopic) {
+      props.matchmakerNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
+    }
 
     // Lambda layer that support python redis module
     const redisLayer = new lambda.LayerVersion(this, 'GameRankRedisLayer', {
@@ -220,7 +222,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'post-match-making.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration.name
+        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration?.name || 'invalid-configuration-name'
       }
     });
     table.grantReadWriteData(gameMatchRequest);
@@ -242,7 +244,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'check-matchmaking-status.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration.name
+        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration?.name || 'invalid-configuration-name'
       }
     });
     table.grantReadWriteData(gameMatchStatus);
