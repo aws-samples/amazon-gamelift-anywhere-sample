@@ -65,7 +65,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     const rankingRedis = new elasticache.CfnCacheCluster(this, 'GomokuRanking', {
       clusterName: 'GomokuRanking',
       port: 6379,
-      cacheNodeType: 'cache.t2.medium',
+      cacheNodeType: 'cache.t3.medium',
       engine: 'redis',
       engineVersion: '6.2',
       numCacheNodes: 1,
