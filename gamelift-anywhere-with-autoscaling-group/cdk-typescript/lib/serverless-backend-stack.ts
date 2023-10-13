@@ -27,16 +27,15 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
-import * as gamelift from 'aws-cdk-lib/aws-gamelift';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
-  matchmakingConfiguration?: gamelift.CfnMatchmakingConfiguration;
-  matchmakerNotificationTopic?: sns.Topic;
 }
 
 export class ServerlessBackendStack extends cdk.Stack {
+  public readonly matchmakingNotificationTopic: sns.Topic;
+
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
@@ -81,7 +80,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     // GameLift Full Access Policy for various lambda functions
     const gameLiftFullAccessPolicy = new iam.ManagedPolicy(this, 'GomokuGameLiftManagedPolicy', {
       managedPolicyName: 'GameLiftFullAccess',
-      document: new iam.PolicyDocument({
+     document: new iam.PolicyDocument({
         statements: [
           new iam.PolicyStatement({
             actions: ['gamelift:*'],
@@ -121,6 +120,9 @@ export class ServerlessBackendStack extends cdk.Stack {
       eventSourceArn: gameResultQueue.queueArn
     });
 
+    const matchmakingNotificationTopic = new sns.Topic(this, 'MatchmakingNotificationTopic');
+    this.matchmakingNotificationTopic = matchmakingNotificationTopic;
+
     // Lambda function that handles the matchmaking event messages and matchmaked result for future reference
     const gameMatchEvent = new lambda.Function(this, 'GameMatchEvent', {
       code: codeAsset,
@@ -132,9 +134,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     });
     table.grantWriteData(gameMatchEvent);
 
-    if (props.matchmakerNotificationTopic) {
-      props.matchmakerNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
-    }
+    matchmakingNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
 
     // Lambda layer that support python redis module
     const redisLayer = new lambda.LayerVersion(this, 'GameRankRedisLayer', {
@@ -214,6 +214,8 @@ export class ServerlessBackendStack extends cdk.Stack {
       methodResponses: [{ statusCode: '200' }]
     });
 
+    const matchmakingConfigurationName = this.node.tryGetContext('MatchmakingConfigurationName');
+
     // Lambda function for API Gateway that make a matchmaking request to FlexMatch configuration
     // it initialize dynamodb table record for the player and request a matchmaking
     const gameMatchRequest = new lambda.Function(this, 'GameMatchRequest', {
@@ -222,7 +224,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'post-match-making.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration?.name || 'invalid-configuration-name'
+        MATCHMAKING_CONFIGURATION_NAME: matchmakingConfigurationName
       }
     });
     table.grantReadWriteData(gameMatchRequest);
@@ -244,7 +246,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'check-matchmaking-status.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
-        MATCHMAKING_CONFIGURATION_NAME: props.matchmakingConfiguration?.name || 'invalid-configuration-name'
+        MATCHMAKING_CONFIGURATION_NAME: matchmakingConfigurationName
       }
     });
     table.grantReadWriteData(gameMatchStatus);

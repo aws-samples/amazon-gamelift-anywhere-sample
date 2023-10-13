@@ -60,6 +60,7 @@
     "GameServerFromPort": 4000, 
     "GameLiftEndpoint": "wss://ap-northeast-2.api.amazongamelift.com", 
     "deploymentRegion": "ap-northeast-2",
-    "keyPairName": "enterYourKey"
+    "keyPairName": "enterYourKey",
+    "MatchmakingConfigurationName": "MatchmakingConfiguration"
   }
 }

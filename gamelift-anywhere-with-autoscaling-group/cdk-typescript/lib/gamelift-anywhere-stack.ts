@@ -33,12 +33,10 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
+  matchmakingNotificationTopic: sns.Topic;
 }
 
 export class GameLiftAnywhereStack extends cdk.Stack {
-  public readonly matchmakingConfig: gamelift.CfnMatchmakingConfiguration;
-  public readonly matchmakerNotificationTopic: sns.Topic;
-
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
@@ -110,24 +108,20 @@ export class GameLiftAnywhereStack extends cdk.Stack {
       }
     });
 
-    const matchmakingNotificationTopic = new sns.Topic(this, 'MatchmakingNotificationTopic');
-    this.matchmakerNotificationTopic = matchmakingNotificationTopic;
-
     // Create a GameLift Matchmaking Config resource
-    const matchmakingConfigName = 'AnywhereDemoMatchmakingConfig';
+    const matchmakingConfigurationName = this.node.tryGetContext('MatchmakingConfigurationName');
     const matchmakingConfig = new gamelift.CfnMatchmakingConfiguration(this, 'MatchmakingConfig', {
       acceptanceRequired: false,
-      name: matchmakingConfigName,
+      name: matchmakingConfigurationName,
       requestTimeoutSeconds: 100,
       ruleSetName: matchmakingRulesetName,
       // the properties below are optional
       backfillMode: 'MANUAL',
-      description: matchmakingConfigName,
+      description: matchmakingConfigurationName,
       flexMatchMode: 'WITH_QUEUE',
       gameSessionQueueArns: [queue.attrArn],
-      notificationTarget: matchmakingNotificationTopic.topicArn
+      notificationTarget: props.matchmakingNotificationTopic.topicArn
     });
-    this.matchmakingConfig = matchmakingConfig;
 
     // Add dependencies for the MatchMakingConfig to queue
     matchmakingConfig.addDependency(matchmakingRuleset);
