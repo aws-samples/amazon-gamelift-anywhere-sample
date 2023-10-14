@@ -30,182 +30,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
+import { GameLiftAnywhereStack } from './gamelift-anywhere-stack';
 
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
-  matchmakingNotificationTopic: sns.Topic;
+  fleet: gamelift.CfnFleet;
+  customLocation: gamelift.CfnLocation;
+  repository: ecr.Repository;
 }
 
-export class GameLiftAnywhereStack extends cdk.Stack {
-  public readonly fleet: gamelift.CfnFleet;
-  public readonly customLocation: gamelift.CfnLocation; 
-
+export class EcsFargateFleetStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
     const vpc = props.vpc;
+    const repository = props.repository;
+    const fleet = props.fleet;
+    const customLocation = props.customLocation;
 
-    // Create GameLift a Location resource for an autoscaling group
-    const locationName = 'custom-anywhere-location';
-    const customLocation = new gamelift.CfnLocation(this, 'Location', {
-      locationName: locationName,
-    });
-
-    this.customLocation = customLocation;
-
-    // Create GameLift a Fleet resource
-    const fleetName = 'anywhere-demo-fleet';
-    const fleet = new gamelift.CfnFleet(this, 'Fleet', {
-      name: fleetName,
-      anywhereConfiguration: {
-        cost: '10'
-      },
-      computeType: 'ANYWHERE',
-      description: 'Demo Anywhere Fleet',
-      locations: [{
-        location: locationName
-      }]
-    });
-    fleet.addDependency(customLocation);
-
-    this.fleet = fleet;
-
-    new cdk.CfnOutput(this, 'FleetId', {
-      value: fleet.attrFleetId
-    });
-
-    // Create a GameLift Matchmaking RuleSet
-    const rulSetBody = fs.readFileSync(path.join(__dirname, '..', 'matchmaking_rule1.yml'), 'utf-8');
-
-    const matchmakingRulesetName = 'AnywhereDemoMatchmakingRule';
-    const matchmakingRuleset = new gamelift.CfnMatchmakingRuleSet(this, 'MatchmakingRule', {
-      name: matchmakingRulesetName,
-      ruleSetBody: rulSetBody
-    });
-
-    // Create a GameLift Alias resource
-    const alias = new gamelift.CfnAlias(this, 'Alias', {
-      name: 'AnywhereDemoAlias',
-      routingStrategy: {
-        type: 'SIMPLE',
-        fleetId: fleet.attrFleetId,
-      },
-      // the properties below are optional
-      description: 'description'
-    });
-
-    // Create a GameLift Queue resource
-    const aliasArn = this.formatArn({ service: 'gamelift', resource: 'alias', resourceName: alias.attrAliasId });
-    
-    const queue = new gamelift.CfnGameSessionQueue(this, 'Queue', {
-      name: 'AnywhereDemoQueue',
-      // the properties below are optional
-      // customEventData: 'customEventData',
-      destinations: [{
-        destinationArn: aliasArn
-      }],
-      priorityConfiguration: {
-        locationOrder: [ locationName ],
-        priorityOrder: [
-          'DESTINATION',
-          'LOCATION',
-          'COST',
-          'LATENCY'
-        ]
-      }
-    });
-
-    // Create a GameLift Matchmaking Config resource
-    const matchmakingConfigurationName = this.node.tryGetContext('MatchmakingConfigurationName');
-    const matchmakingConfig = new gamelift.CfnMatchmakingConfiguration(this, 'MatchmakingConfig', {
-      acceptanceRequired: false,
-      name: matchmakingConfigurationName,
-      requestTimeoutSeconds: 100,
-      ruleSetName: matchmakingRulesetName,
-      // the properties below are optional
-      backfillMode: 'MANUAL',
-      description: matchmakingConfigurationName,
-      flexMatchMode: 'WITH_QUEUE',
-      gameSessionQueueArns: [queue.attrArn],
-      notificationTarget: props.matchmakingNotificationTopic.topicArn
-    });
-
-    // Add dependencies for the MatchMakingConfig to queue
-    matchmakingConfig.addDependency(matchmakingRuleset);
-
-    // Create a Security Group for instances in the anywhere fleet
-    const sg = new ec2.SecurityGroup(this, 'SecurityGroup', {
-      vpc,
-      securityGroupName: `${this.stackName}-sg`,
-      allowAllOutbound: true,
-      description: `Security group for ${this.stackName}`
-    });
-    sg.connections.allowFrom(sg, ec2.Port.allTraffic(), 'Allow all EC2 instances communicate each other with this SG');
-
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcpRange(4000, 4010), 'Allow Game Server Access', false);
-
-    // Create a S3 bucket 
-	  // Add removal policy and auto object deletion for cleanup
-    const bucket = new s3.Bucket(this, 'gamebinaries', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true
-    });
-
-    new cdk.CfnOutput(this, 'BucketURL', {
-      value: bucket.bucketDomainName
-    });
-
-    const s3AccessRoleForGameLift = new iam.Role(this, 's3_access_role_for_gamelift', {
-      assumedBy: new iam.CompositePrincipal(
-         new iam.ServicePrincipal('gamelift.amazonaws.com'),
-         new iam.ServicePrincipal('cloudformation.amazonaws.com'),
-      ),
-      description: 'Allow GameLift to access S3 bucket',
-    });
-
-    s3AccessRoleForGameLift.addToPolicy(new iam.PolicyStatement({
-      actions: [
-        's3:GetObject',
-        's3:GetObjectVersion',
-        's3:GetObjectMetadata',
-        's3:*Object*'
-      ],
-      resources: [ bucket.arnForObjects("*") ]
-    }));
-
-    new cdk.CfnOutput(this, 's3AccessRoleForGameLiftArn', {
-      value: s3AccessRoleForGameLift.roleArn
-    });
-
-    const gameliftFleetRole = new iam.Role(this, 'gamelift_fleet_role', {
-      assumedBy: new iam.ServicePrincipal('gamelift.amazonaws.com'),
-      description: 'Allow GameLift to access S3 bucket',
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSQSFullAccess'),
-      ]
-    });
-
-    new cdk.CfnOutput(this, 'gameliftFleetRoleArn', {
-      value: gameliftFleetRole.roleArn
-    });
-
-    /*
-    // upload game server binary
-    new s3deploy.BucketDeployment(this, 'DeployBucketBinaries', {
-      // The name of the S3 bucket.
-      destinationBucket: bucket,
-      // The path to the file to be uploaded.'
-      sources: [ s3deploy.Source.asset(path.join(__dirname, '..', 'gamebinaries')) ],
-      // Need to increase memoryLimit from 128 for 100MB+ deployment size
-      memoryLimit: 256,
-    });
-    */
-
-
-
-
-/* ECS deployment
- *
     const cluster = new ecs.Cluster(this, "MyCluster", {
       clusterName: 'ecs-gameserver-cluster',
       containerInsights: false,
@@ -261,12 +103,12 @@ export class GameLiftAnywhereStack extends cdk.Stack {
 
     const container = fargateTaskDefinition.addContainer("backend", {
       // Use an image from Amazon ECR
-      image: ecs.ContainerImage.fromRegistry('018700324583.dkr.ecr.ap-northeast-2.amazonaws.com/gomoku'),
+      image: ecs.ContainerImage.fromRegistry(repository.repositoryUri),
       logging: ecs.LogDrivers.awsLogs({streamPrefix: 'ecs-logs'}),
       environment: { 
         'CLUSTER': cluster.clusterName,
         'PORT' : '4000',
-        'LOCATION' : 'custom-anywhere-location',
+        'LOCATION' : customLocation.locationName,
         'FLEET_ID' : fleet.attrFleetId,
         'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint')
       }
@@ -284,19 +126,19 @@ export class GameLiftAnywhereStack extends cdk.Stack {
     const service = new ecs.FargateService(this, 'gomoku', {
       cluster,
       taskDefinition: fargateTaskDefinition,
-      desiredCount: 1,
+      desiredCount: 5,
       assignPublicIp: true,
       securityGroups: [sg_service],
       enableExecuteCommand: true
     });
 
-ECS deployment */
 
 
 
   
     // Setup AutoScaling policy
-    //const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
+    const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
+    
     /*
     scaling.scaleToTrackCustomMetric()
     scaling.scaleOnCpuUtilization('CpuScaling', {

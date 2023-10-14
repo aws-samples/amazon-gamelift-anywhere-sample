@@ -62,7 +62,15 @@ func main() {
 		mGameSession:           nil,
 	}
 
-	GGameLiftManager.SetSQSClientInfo("ap-northeast-2", "https://sqs.ap-northeast-2.amazonaws.com/394254462122/abp-game-result-queue", "")
+	sqs_endpoint := os.Getenv("SQS_ENDPOINT")
+
+	if sqs_endpoint == "" {
+		myLogger.Print("empty SQS ARN. Not sending game server results")
+		GGameLiftManager.SetSQSClientInfo("", "", "")
+	} else {
+		myLogger.Print("Configuring SQS ARN: ", sqs_endpoint)
+		GGameLiftManager.SetSQSClientInfo("ap-northeast-2", sqs_endpoint, "")
+	}
 
 	GGameLiftManager.InitializeGameLift(port, gamelift_endpoint, fleet_id, host_id)
 
