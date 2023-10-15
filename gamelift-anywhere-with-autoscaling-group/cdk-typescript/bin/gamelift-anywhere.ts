@@ -21,8 +21,7 @@ const gameliftAnywhereStack = new GameLiftAnywhereStack(app, 'GameLiftAnywhereSt
   matchmakingNotificationTopic: serverlessBackendStack.matchmakingNotificationTopic
 });
 const ecrStack = new EcrStack(app, 'EcrStack', {
-  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
-  vpc: vpcStack.vpc,
+  env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION }
 });
 const ecsFargateFleetStack = new EcsFargateFleetStack(app, 'EcsFargateFleetStack', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
