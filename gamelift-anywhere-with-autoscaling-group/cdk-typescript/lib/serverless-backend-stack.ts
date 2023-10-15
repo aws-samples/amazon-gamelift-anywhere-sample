@@ -48,6 +48,9 @@ export class ServerlessBackendStack extends cdk.Stack {
       stream: ddb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
+    new cdk.CfnOutput(this, 'DynamoDBTableName', {
+      value: table.tableName
+    });
 
     // ElastiCache for Redis cluster for ranking info
     const rankingRedisSubnetGroup = new elasticache.CfnSubnetGroup(this, 'GomokuRedisSubnetGroup', {
