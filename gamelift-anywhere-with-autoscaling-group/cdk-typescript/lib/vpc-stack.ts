@@ -20,6 +20,16 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 
+// Specific availability zones to use.
+// For example ap-northeast-2 region recommened to use ap-northeast-2a and ap-northeast-2c az for service availability
+const availabilityZonesForRegion = new Map<string, string[]>([
+  [ 'ap-northeast-2', [ 'ap-northeast-2a', 'ap-northeast-2c' ] ],
+  [ 'ap-northeast-1', [ 'ap-northeast-1a', 'ap-northeast-1b' ] ],
+  [ 'us-east-1', [ 'us-east-1a', 'us-east-1b' ] ],
+  [ 'us-west-2', [ 'us-west-2a', 'us-west-2b' ] ],
+  [ 'eu-central-1', [ 'eu-central-1a', 'eu-central-1b' ] ],
+]);
+
 export class VpcStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   
@@ -27,7 +37,9 @@ export class VpcStack extends cdk.Stack {
     super(scope, id, props);
 
     // Create a VPC for Gamelift anywhere fleet
-    const vpc = new ec2.Vpc(this, 'VPC');
+    const vpc = new ec2.Vpc(this, 'VPC', {
+      availabilityZones: availabilityZonesForRegion.get(this.region)
+    });
     this.vpc = vpc;
   }
 }
