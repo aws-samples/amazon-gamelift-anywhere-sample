@@ -27,7 +27,12 @@ export class VpcStack extends cdk.Stack {
     super(scope, id, props);
 
     // Create a VPC for Gamelift anywhere fleet
-    const vpc = new ec2.Vpc(this, 'VPC');
+    const vpc = new ec2.Vpc(this, 'VPC', {
+      availabilityZones :[
+        "ap-northeast-2a",
+        "ap-northeast-2c"
+      ]
+    });
     this.vpc = vpc;
   }
 }
