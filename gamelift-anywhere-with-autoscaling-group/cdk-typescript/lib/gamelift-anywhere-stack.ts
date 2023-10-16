@@ -45,7 +45,40 @@ export class GameLiftAnywhereStack extends cdk.Stack {
 
     const vpc = props.vpc;
 
-    // Create GameLift a Location resource for an autoscaling group
+    // Create location resource for dev machine
+    const devLocationName = 'custom-devmachine-location';
+    const devCustomLocation = new gamelift.CfnLocation(this, 'DevLocation', {
+      locationName: devLocationName,
+    });
+    
+    // Create GameLift a Fleet resource for dev machine
+    const devFleetName = 'anywhere-devmachine-fleet';
+    const devFleet = new gamelift.CfnFleet(this, 'DevFleet', {
+      name: devFleetName,
+      anywhereConfiguration: {
+        cost: '10'
+      },
+      computeType: 'ANYWHERE',
+      description: 'Dev Anywhere Fleet',
+      locations: [{
+        location: devLocationName
+      }]
+    });
+    devFleet.addDependency(devCustomLocation);
+    
+    // Create a GameLift Alias resource for dev machine
+    const devAlias = new gamelift.CfnAlias(this, 'DevAlias', {
+      name: 'AnywhereDevFleetAlias',
+      routingStrategy: {
+        type: 'SIMPLE',
+        fleetId: devFleet.attrFleetId,
+      },
+      // the properties below are optional
+      description: 'Alias to Dev Anywhere Fleet'
+    });
+    const devAliasArn = this.formatArn({ service: 'gamelift', resource: 'alias', resourceName: devAlias.attrAliasId });
+    
+    // Create  Location resource for demo fleet
     const locationName = 'custom-anywhere-location';
     const customLocation = new gamelift.CfnLocation(this, 'Location', {
       locationName: locationName,
@@ -53,7 +86,7 @@ export class GameLiftAnywhereStack extends cdk.Stack {
 
     this.customLocation = customLocation;
 
-    // Create GameLift a Fleet resource
+    // Create GameLift demo fleet
     const fleetName = 'anywhere-demo-fleet';
     const fleet = new gamelift.CfnFleet(this, 'Fleet', {
       name: fleetName,
@@ -83,7 +116,7 @@ export class GameLiftAnywhereStack extends cdk.Stack {
       ruleSetBody: rulSetBody
     });
 
-    // Create a GameLift Alias resource
+    // Create a GameLift Alias resource for demo fleet
     const alias = new gamelift.CfnAlias(this, 'Alias', {
       name: 'AnywhereDemoAlias',
       routingStrategy: {
@@ -102,8 +135,12 @@ export class GameLiftAnywhereStack extends cdk.Stack {
       // the properties below are optional
       // customEventData: 'customEventData',
       destinations: [{
+        destinationArn: devAliasArn
+      },
+      {
         destinationArn: aliasArn
-      }],
+      }
+      ],
       priorityConfiguration: {
         locationOrder: [ locationName ],
         priorityOrder: [
@@ -189,6 +226,9 @@ export class GameLiftAnywhereStack extends cdk.Stack {
       value: gameliftFleetRole.roleArn
     });
 
+
+    
+    
     /*
     // upload game server binary
     new s3deploy.BucketDeployment(this, 'DeployBucketBinaries', {

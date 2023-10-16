@@ -111,13 +111,14 @@ export class EcsFargateFleetStack extends cdk.Stack {
         'LOCATION' : customLocation.locationName,
         'FLEET_ID' : fleet.attrFleetId,
         'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint')
-      }
+      },
       // ... other options here ...
     });
     
     container.addPortMappings({
       containerPort: 4000
     }); 
+    
 
     const sg_service = new ec2.SecurityGroup(this, 'gomoku-demo-sg', { vpc: vpc });
 
@@ -129,10 +130,8 @@ export class EcsFargateFleetStack extends cdk.Stack {
       desiredCount: 5,
       assignPublicIp: true,
       securityGroups: [sg_service],
-      enableExecuteCommand: true
+      enableExecuteCommand: true,
     });
-
-
 
 
   
