@@ -24,7 +24,7 @@ import * as ec2 from 'aws-cdk-lib/aws-ec2';
 // For example ap-northeast-2 region recommened to use ap-northeast-2a and ap-northeast-2c az for service availability
 const availabilityZonesForRegion = new Map<string, string[]>([
   [ 'ap-northeast-2', [ 'ap-northeast-2a', 'ap-northeast-2c' ] ],
-  [ 'ap-northeast-1', [ 'ap-northeast-1a', 'ap-northeast-1b' ] ],
+  [ 'ap-northeast-1', [ 'ap-northeast-1a', 'ap-northeast-1c' ] ],
   [ 'us-east-1', [ 'us-east-1a', 'us-east-1b' ] ],
   [ 'us-west-2', [ 'us-west-2a', 'us-west-2b' ] ],
   [ 'eu-central-1', [ 'eu-central-1a', 'eu-central-1b' ] ],
