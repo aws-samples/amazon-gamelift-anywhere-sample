@@ -62,7 +62,7 @@ func main() {
 		mGameSession:           nil,
 	}
 
-	sqs_endpoint := os.Getenv("SQS_ENDPOINT")
+	sqs_endpoint := os.Getenv("SQS_URL")
 
 	if sqs_endpoint == "" {
 		myLogger.Print("empty SQS ARN. Not sending game server results")

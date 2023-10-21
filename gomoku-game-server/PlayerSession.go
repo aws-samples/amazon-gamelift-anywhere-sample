@@ -220,8 +220,7 @@ func (ps *PlayerSession) GetPlayerScore() int {
 func checkError(err error) bool {
 	if err != nil {
 		// TODO for now avoid Fatal error which terminates the process
-		//log.Fatalln("Fatal error: ", err.Error())
-		log.Print("Fatal error: ", err.Error())
+		//log.Print("Fatal error: ", err.Error())
 		return true
 	}
 	return false
