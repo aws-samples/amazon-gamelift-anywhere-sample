@@ -10,14 +10,15 @@ export class EcrStack extends cdk.Stack {
     super(scope, id, props);
 
     const repository = new ecr.Repository(this, 'Repo', {
-        repositoryName: 'gomoku-goa2023',
-        removalPolicy: cdk.RemovalPolicy.DESTROY
+      repositoryName: 'gomoku-goa2023',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteImages: true
     });
     
     this.repository = repository;
     
     new cdk.CfnOutput(this, 'EcrRepositoryUri', {
-        value: repository.repositoryUri
+      value: repository.repositoryUri
     });
   };
 
