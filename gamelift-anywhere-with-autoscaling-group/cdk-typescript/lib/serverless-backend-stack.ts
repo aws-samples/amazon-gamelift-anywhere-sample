@@ -20,7 +20,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
-import * as ddb from 'aws-cdk-lib/aws-dynamodb';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as elasticache from 'aws-cdk-lib/aws-elasticache';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -40,13 +40,21 @@ export class ServerlessBackendStack extends cdk.Stack {
     super(scope, id, props);
 
     // DynamoDB for player info
-    const table = new ddb.Table(this, 'GomokuPlayerInfo', {
+    const table = new dynamodb.Table(this, 'GomokuPlayerInfo', {
       tableName: 'GomokuPlayerInfo',
-      partitionKey: { name: 'PlayerName', type: ddb.AttributeType.STRING },
+      partitionKey: { name: 'PlayerName', type: dynamodb.AttributeType.STRING },
       timeToLiveAttribute: 'ExpireAt',
-      billingMode: ddb.BillingMode.PAY_PER_REQUEST,
-      stream: ddb.StreamViewType.NEW_AND_OLD_IMAGES,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+    const leaderboardGSIName = 'LeaderBoard';
+    table.addGlobalSecondaryIndex({
+      indexName: leaderboardGSIName,
+      partitionKey: { name: 'LeaderboardName', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'Score', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.INCLUDE,
+      nonKeyAttributes: [ 'PlayerName' ]
     });
     new cdk.CfnOutput(this, 'DynamoDBTableName', {
       value: table.tableName
@@ -201,12 +209,16 @@ export class ServerlessBackendStack extends cdk.Stack {
       layers: [redisLayer],
       handler: 'read-player-ranking.lambda_handler',
       environment: {
-        REDIS: rankingRedis.attrRedisEndpointAddress
+        REDIS: rankingRedis.attrRedisEndpointAddress,
+        TABLE_NAME: table.tableName,
+        INDEX_NAME: leaderboardGSIName,
       },
+      timeout: cdk.Duration.seconds(10),
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [defaultSG]
     });
+    table.grantReadData(gameRankReader);
 
     const rankingApi = gomokuApi.root.addResource('ranking');
     rankingApi.addMethod('GET', new apigateway.LambdaIntegration(gameRankReader, {

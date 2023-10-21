@@ -36,7 +36,7 @@ def lambda_handler(event, context):
 
     if 'Item' not in result:
         # Create Item
-        ddb_table.put_item( Item={ 'PlayerName' : playerName, 'Score' : 1000, 'Win' : 0, 'Lose' : 0 } )
+        ddb_table.put_item( Item={ 'PlayerName' : playerName, 'Score' : 1000, 'Win' : 0, 'Lose' : 0, 'LeaderboardName': 'Score' } )
         playerScore = 1000
     else:
         playerScore = result['Item']['Score']
