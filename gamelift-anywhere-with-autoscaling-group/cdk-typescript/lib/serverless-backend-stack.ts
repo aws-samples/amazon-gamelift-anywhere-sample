@@ -28,14 +28,10 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
-interface StackProps extends cdk.StackProps {
-  vpc: ec2.Vpc;
-}
-
 export class ServerlessBackendStack extends cdk.Stack {
   public readonly matchmakingNotificationTopic: sns.Topic;
 
-  constructor(scope: Construct, id: string, props: StackProps) {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     // DynamoDB for player info
