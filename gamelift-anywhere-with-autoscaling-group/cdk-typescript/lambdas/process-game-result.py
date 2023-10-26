@@ -35,7 +35,7 @@ def lambda_handler(event, context):
 
         ddb_table.update_item(
             Key={ 'PlayerName' : playerName },
-            UpdateExpression="SET Score = if_not_exists(Score, :basescore) + :score, Win = if_not_exists(Win, :basewin) + :win, Lose = if_not_exists(Lose, :baselose) + :lose, LeaderboardName = if_not_exists(LeaderboardName, LeaderboardName)",
+            UpdateExpression="SET Score = if_not_exists(Score, :basescore) + :score, Win = if_not_exists(Win, :basewin) + :win, Lose = if_not_exists(Lose, :baselose) + :lose",
             ExpressionAttributeValues={
                 ':basescore': 1000,
                 ':basewin': 0,
