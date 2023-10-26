@@ -20,64 +20,38 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
-import * as ddb from 'aws-cdk-lib/aws-dynamodb';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as elasticache from 'aws-cdk-lib/aws-elasticache';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
-interface StackProps extends cdk.StackProps {
-  vpc: ec2.Vpc;
-}
-
 export class ServerlessBackendStack extends cdk.Stack {
   public readonly matchmakingNotificationTopic: sns.Topic;
 
-  constructor(scope: Construct, id: string, props: StackProps) {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     // DynamoDB for player info
-    const table = new ddb.Table(this, 'GomokuPlayerInfo', {
+    const table = new dynamodb.Table(this, 'GomokuPlayerInfo', {
       tableName: 'GomokuPlayerInfo',
-      partitionKey: { name: 'PlayerName', type: ddb.AttributeType.STRING },
+      partitionKey: { name: 'PlayerName', type: dynamodb.AttributeType.STRING },
       timeToLiveAttribute: 'ExpireAt',
-      billingMode: ddb.BillingMode.PAY_PER_REQUEST,
-      stream: ddb.StreamViewType.NEW_AND_OLD_IMAGES,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+    const leaderboardGSIName = 'LeaderBoard';
+    table.addGlobalSecondaryIndex({
+      indexName: leaderboardGSIName,
+      partitionKey: { name: 'LeaderboardName', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'Score', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.INCLUDE,
+      nonKeyAttributes: [ 'PlayerName' ]
     });
     new cdk.CfnOutput(this, 'DynamoDBTableName', {
       value: table.tableName
-    });
-
-    // ElastiCache for Redis cluster for ranking info
-    const rankingRedisSubnetGroup = new elasticache.CfnSubnetGroup(this, 'GomokuRedisSubnetGroup', {
-      description: 'Gomoku Redis Subnet Group',
-      subnetIds: props.vpc.privateSubnets.map(s => s.subnetId),
-    });
-
-    const defaultSG = new ec2.SecurityGroup(this, 'GomokuDefault', {
-      securityGroupName: 'GomokuDefault',
-      description: 'Security group for Gomoku Demo Resources',
-      vpc: props.vpc
-    });
-    defaultSG.addIngressRule(defaultSG, ec2.Port.tcpRange(0, 65535));
-
-    const rankingRedis = new elasticache.CfnCacheCluster(this, 'GomokuRanking', {
-      clusterName: 'GomokuRanking',
-      port: 6379,
-      cacheNodeType: 'cache.t3.medium',
-      engine: 'redis',
-      engineVersion: '6.2',
-      numCacheNodes: 1,
-      cacheSubnetGroupName: rankingRedisSubnetGroup.ref,
-      vpcSecurityGroupIds: [defaultSG.securityGroupId],
-    });
-
-    new cdk.CfnOutput(this, 'RedisEndpoint', {
-      value: rankingRedis.attrRedisEndpointAddress
     });
 
     // GameLift Full Access Policy for various lambda functions
@@ -139,40 +113,6 @@ export class ServerlessBackendStack extends cdk.Stack {
 
     matchmakingNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
 
-    // Lambda layer that support python redis module
-    const redisLayer = new lambda.LayerVersion(this, 'GameRankRedisLayer', {
-      compatibleRuntimes: [
-        lambda.Runtime.PYTHON_3_7,
-        lambda.Runtime.PYTHON_3_8,
-        lambda.Runtime.PYTHON_3_9,
-        lambda.Runtime.PYTHON_3_10,
-        lambda.Runtime.PYTHON_3_11
-      ],
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambda_layers', 'redis')),
-      removalPolicy: cdk.RemovalPolicy.DESTROY
-    });
-
-    // Lambda function that read DynamoDB stream that publish updated player record and update player ranking record in redis 
-    const gameRankUpdate = new lambda.Function(this, 'GameRankUpdate', {
-      code: codeAsset,
-      runtime: lambda.Runtime.PYTHON_3_11,
-      layers: [redisLayer],
-      handler: 'update-player-ranking.lambda_handler',
-      environment: {
-        REDIS: rankingRedis.attrRedisEndpointAddress
-      },
-      vpc: props.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [defaultSG]
-    });
-    table.grantStreamRead(gameRankUpdate);
-
-    gameRankUpdate.addEventSourceMapping('GameRankUpdateEventSourceMapping', {
-      eventSourceArn: table.tableStreamArn,
-      startingPosition: lambda.StartingPosition.TRIM_HORIZON,
-      retryAttempts: 5
-    });
-
     // API Gateway
     const gomokuApi = new apigateway.RestApi(this, 'GomokuAPI', {
       restApiName: 'GomokuAPI',
@@ -198,15 +138,13 @@ export class ServerlessBackendStack extends cdk.Stack {
     const gameRankReader = new lambda.Function(this, 'GameRankReader', {
       code: codeAsset,
       runtime: lambda.Runtime.PYTHON_3_11,
-      layers: [redisLayer],
       handler: 'read-player-ranking.lambda_handler',
       environment: {
-        REDIS: rankingRedis.attrRedisEndpointAddress
-      },
-      vpc: props.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [defaultSG]
+        TABLE_NAME: table.tableName,
+        INDEX_NAME: leaderboardGSIName,
+      }
     });
+    table.grantReadData(gameRankReader);
 
     const rankingApi = gomokuApi.root.addResource('ranking');
     rankingApi.addMethod('GET', new apigateway.LambdaIntegration(gameRankReader, {

@@ -13,7 +13,6 @@ const vpcStack = new VpcStack(app, 'VpcStack', {
 });
 const serverlessBackendStack = new ServerlessBackendStack(app, 'ServerlessBackendStack', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
-  vpc: vpcStack.vpc,
 });
 const gameliftAnywhereStack = new GameLiftAnywhereStack(app, 'GameLiftAnywhereStack', {
   env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
