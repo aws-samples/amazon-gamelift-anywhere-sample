@@ -198,7 +198,7 @@ func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint st
 		OnProcessTerminate:  g.OnProcessTerminate,
 		OnHealthCheck:       g.OnHealthCheck,
 		LogParameters: server.LogParameters{
-			LogPaths: []string{"/local/game/logfile.txt"},
+			LogPaths: []string{logPath},
 		},
 		Port: listenPort,
 	})
