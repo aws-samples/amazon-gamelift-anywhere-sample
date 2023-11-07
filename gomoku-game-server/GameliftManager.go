@@ -41,10 +41,9 @@ type GameLiftManager struct {
 	mPlayerReadyCount      int
 	mCheckTerminationCount int
 	mActivated             bool
+	mRegion                string
 
 	mSQSUrl        string
-	mSQSRole       string
-	mSQSRegion     string
 	mStateFilename string // for maintaining game session state (IDLE or ACTIVE)
 }
 
@@ -54,6 +53,22 @@ type gameProcess struct {
 	Logs server.LogParameters
 }
 */
+
+func (g *GameLiftManager) LoadConfig(ctx context.Context) aws.Config {
+	if g.mRegion == "" {
+		cfg, err := config.LoadDefaultConfig(ctx)
+		if err != nil {
+			panic("configuration error, " + err.Error())
+		}
+		return cfg
+	} else {
+		cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(g.mRegion))
+		if err != nil {
+			panic("configuration error, " + err.Error())
+		}
+		return cfg
+	}
+}
 
 func (g *GameLiftManager) OnStartGameSession(model.GameSession) {
 	// When a game session is created,
@@ -137,19 +152,13 @@ func (g *GameLiftManager) OnHealthCheck() bool {
 
 func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint string, fleetId string, hostId string, logPath string) bool {
 	var err error
-	var cfg aws.Config
-
-	ctx := context.TODO()
-
-	cfg, err = config.LoadDefaultConfig(ctx)
-	if err != nil {
-		panic("configuration error, " + err.Error())
-	}
-
-	svc := gamelift.NewFromConfig(cfg)
 
 	if (hostId != "") && (fleetId != "") {
 		myLogger.Print("InitializeGameLift in anywhere fleet mode")
+
+		ctx := context.TODO()
+		cfg := g.LoadConfig(ctx)
+		svc := gamelift.NewFromConfig(cfg)
 		output, err := svc.GetComputeAuthToken(ctx,
 			&gamelift.GetComputeAuthTokenInput{
 				ComputeName: aws.String(hostId),
@@ -213,54 +222,12 @@ func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint st
 	return true
 }
 
-func (g *GameLiftManager) SetSQSClientInfo(region string, url string, role string) {
-	g.mSQSUrl = url
-	g.mSQSRegion = region
-	g.mSQSRole = role
-}
 
-/*
-// SQSSendMessageAPI defines the interface for the GetQueueUrl and SendMessage functions.
-// We use this interface to test the functions using a mocked service.
-
-	type SQSSendMessageAPI interface {
-		GetQueueUrl(ctx context.Context,
-			params *sqs.GetQueueUrlInput,
-			optFns ...func(*sqs.Options)) (*sqs.GetQueueUrlOutput, error)
-
-		SendMessage(ctx context.Context,
-			params *sqs.SendMessageInput,
-			optFns ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
-
-		SendMessageBatch(ctx context.Context,
-			params *sqs.SendMessageBatchInput,
-			optFns ...func(*sqs.Options)) (*sqs.SendMessageBatchOutput, error)
-	}
-
-	func GetQueueURL(c context.Context, api SQSSendMessageAPI, input *sqs.GetQueueUrlInput) (*sqs.GetQueueUrlOutput, error) {
-		return api.GetQueueUrl(c, input)
-	}
-
-	func SendMsg(c context.Context, api SQSSendMessageAPI, input *sqs.SendMessageInput) (*sqs.SendMessageOutput, error) {
-		return api.SendMessage(c, input)
-	}
-
-	func SendMsgBatch(c context.Context, api SQSSendMessageAPI, input *sqs.SendMessageBatchInput) (*sqs.SendMessageBatchOutput, error) {
-		return api.SendMessageBatch(c, input)
-	}
-*/
 func (g *GameLiftManager) SendGameResultToSQS(blackJson string, whiteJson string) {
 	// Authenticate and send message to SQS queue
 	ctx := context.TODO()
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		panic("configuration error, " + err.Error())
-	}
-
+	cfg := g.LoadConfig(ctx)
 	svc := sqs.NewFromConfig(cfg)
-
-	//cfg.Region = g.mSQSRegion
-	//client := sqs.NewFromConfig(cfg)
 
 	sMInput := &sqs.SendMessageBatchInput{
 		Entries: []types.SendMessageBatchRequestEntry{

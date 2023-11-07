@@ -40,7 +40,7 @@ func GetOrMakeProcessId() string {
 
 func main() {
 	var port int
-	var gamelift_endpoint, fleet_id, host_id string
+	var gamelift_endpoint, fleet_id, host_id, sqs_url, region string
 
 	processId := GetOrMakeProcessId()
 	logFilePath := fmt.Sprintf("logs/%s.log", processId)
@@ -72,23 +72,23 @@ func main() {
 	flag.StringVar(&gamelift_endpoint, "endpoint", "", "gamelift endpoint URL")
 	flag.StringVar(&fleet_id, "fleet-id", "", "fleet Id")
 	flag.StringVar(&host_id, "host-id", "", "host id")
+	flag.StringVar(&sqs_url, "sqs-url", "", "sqs url")
+	flag.StringVar(&region, "region", "", "region")
 
 	flag.Parse()
 
-	GGameLiftManager := &GameLiftManager{
+	if sqs_url == "" {
+		myLogger.Print("empty SQS URL. Not sending game server results")
+	} else {
+		myLogger.Print("Configuring SQS URL: ", sqs_url)
+	}
+
+	GGameLiftManager = &GameLiftManager{
 		mPlayerReadyCount:      0,
 		mCheckTerminationCount: 0,
 		mGameSession:           nil,
-	}
-
-	sqs_endpoint := os.Getenv("SQS_URL")
-
-	if sqs_endpoint == "" {
-		myLogger.Print("empty SQS ARN. Not sending game server results")
-		GGameLiftManager.SetSQSClientInfo("", "", "")
-	} else {
-		myLogger.Print("Configuring SQS ARN: ", sqs_endpoint)
-		GGameLiftManager.SetSQSClientInfo("ap-northeast-2", sqs_endpoint, "")
+		mRegion:                region,
+		mSQSUrl:                sqs_url,
 	}
 
 	GGameLiftManager.InitializeGameLift(port, gamelift_endpoint, fleet_id, host_id, logFilePath)
