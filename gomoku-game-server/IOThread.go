@@ -22,7 +22,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 )
@@ -38,12 +37,12 @@ func DoIocpJob(conn net.Conn, ps *PlayerSession, wg *sync.WaitGroup) {
 		n, err := ps.mConn.Read(buf[0:])
 
 		if checkError(err) {
-			log.Print("Exiting go routine")
+			myLogger.Print("Exiting go routine")
 			break
 		}
 
 		if n < 4 {
-			log.Print("Read Error too short length: ", n)
+			myLogger.Print("Read Error too short length: ", n)
 			ps.Disconnect(DR_ACTIVE)
 			return
 		}
@@ -63,7 +62,7 @@ func DoIocpJob(conn net.Conn, ps *PlayerSession, wg *sync.WaitGroup) {
 		switch PacketTypes(mType) {
 		case PKT_CS_START:
 			if mSize > 2+2+MAX_SESSION_LEN {
-				log.Print("PKT_CS_START size too short length: ", mSize)
+				myLogger.Print("PKT_CS_START size too short length: ", mSize)
 				ps.Disconnect(DR_ACTIVE)
 				return
 			}
@@ -72,7 +71,7 @@ func DoIocpJob(conn net.Conn, ps *PlayerSession, wg *sync.WaitGroup) {
 
 		case PKT_CS_EXIT:
 			if mSize > 2+2+MAX_SESSION_LEN {
-				log.Print("PKT_CS_EXIT size too short length: ", mSize)
+				myLogger.Print("PKT_CS_EXIT size too short length: ", mSize)
 				ps.Disconnect(DR_ACTIVE)
 				return
 			}
@@ -81,7 +80,7 @@ func DoIocpJob(conn net.Conn, ps *PlayerSession, wg *sync.WaitGroup) {
 
 		case PKT_CS_PUT_STONE:
 			if mSize > 12 {
-				log.Print("PKT_CS_PUT_STONE size too short length: ", mSize)
+				myLogger.Print("PKT_CS_PUT_STONE size too short length: ", mSize)
 				ps.Disconnect(DR_ACTIVE)
 				return
 			}
@@ -93,7 +92,7 @@ func DoIocpJob(conn net.Conn, ps *PlayerSession, wg *sync.WaitGroup) {
 
 		case PKT_CS_PING:
 			if mSize > 2+2+MAX_SESSION_LEN {
-				log.Print("PKT_CS_PING size too short length: ", mSize)
+				myLogger.Print("PKT_CS_PING size too short length: ", mSize)
 				ps.Disconnect(DR_ACTIVE)
 				return
 			}
@@ -101,18 +100,18 @@ func DoIocpJob(conn net.Conn, ps *PlayerSession, wg *sync.WaitGroup) {
 			Handler_PKT_CS_PING(playerId)
 
 		default:
-			log.Print("Error Unknown messge type: ", mType)
+			myLogger.Print("Error Unknown messge type: ", mType)
 		}
 	}
 }
 
 func Handler_PKT_CS_START(session *PlayerSession, playerId string) {
-	log.Print("PKT_CS_START from ", playerId)
+	myLogger.Print("PKT_CS_START from ", playerId)
 	session.PlayerReady(playerId)
 }
 
 func Handler_PKT_CS_EXIT(session *PlayerSession, playerId string) {
-	log.Print("PKT_CS_EXIT from ", playerId)
+	myLogger.Print("PKT_CS_EXIT from ", playerId)
 	session.PlayerExit(playerId)
 }
 
@@ -121,5 +120,5 @@ func Handler_PKT_CS_PUT_STONE(session *PlayerSession, xpos int, ypos int) {
 }
 
 func Handler_PKT_CS_PING(playerId string) {
-	log.Print("PKT_CS_PING from ", playerId)
+	myLogger.Print("PKT_CS_PING from ", playerId)
 }

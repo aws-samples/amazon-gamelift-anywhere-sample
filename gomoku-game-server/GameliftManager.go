@@ -23,7 +23,6 @@ import (
 	"aws/amazon-gamelift-go-sdk/server"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -66,9 +65,9 @@ func (g *GameLiftManager) OnStartGameSession(model.GameSession) {
 	//FastSpinlockGuard lock(mLock);
 	err := server.ActivateGameSession()
 	if err != nil {
-		log.Fatal(err.Error())
+		myLogger.Fatal(err.Error())
 	}
-	log.Println("[GameLift] OnStartGameSession")
+	myLogger.Println("[GameLift] OnStartGameSession")
 
 	g.mGameSession = &GameSession{
 		mPlayerBlack: nil,
@@ -83,9 +82,9 @@ func (g *GameLiftManager) OnStartGameSession(model.GameSession) {
 	cmd := exec.Command("bash", "-c", cmd_string)
 	stdout, err2 := cmd.Output()
 	if err2 != nil {
-		log.Println("Error in writing state file: ", err2)
+		myLogger.Println("Error in writing state file: ", err2)
 	} else {
-		log.Println("State file written: ", string(stdout))
+		myLogger.Println("State file written: ", string(stdout))
 	}
 
 	//mMatchMakerData = g.mGameSession.GetMatchmakerData()
@@ -157,7 +156,7 @@ func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint st
 			})
 
 		if err != nil {
-			log.Fatal(err.Error())
+			myLogger.Fatal(err.Error())
 		}
 
 		err = server.InitSDK(server.ServerParameters{
@@ -177,7 +176,7 @@ func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint st
 
 	if err != nil {
 		myLogger.Print("InitSDK failed : ", err.Error())
-		log.Fatal(err.Error())
+		myLogger.Fatal(err.Error())
 	}
 	// Make sure to call server.Destroy() when the application quits.
 	// This resets the local connection with GameLift's agent.
@@ -195,20 +194,20 @@ func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint st
 	})
 	if err != nil {
 		myLogger.Print("ProcessReady failed : ", err.Error())
-		log.Fatal(err.Error())
+		myLogger.Fatal(err.Error())
 	}
 
 	g.mActivated = true
-	log.Println("ProcessReady... : ", g.mActivated)
+	myLogger.Println("ProcessReady... : ", g.mActivated)
 
 	g.mStateFilename = "/tmp/" + strconv.Itoa(listenPort) + ".state"
 	cmd_string := "echo IDLE > " + g.mStateFilename
 	cmd := exec.Command("bash", "-c", cmd_string)
 	stdout, err2 := cmd.Output()
 	if err2 != nil {
-		log.Println("Error in writing state file: ", err2)
+		myLogger.Println("Error in writing state file: ", err2)
 	} else {
-		log.Println("State file written: ", string(stdout))
+		myLogger.Println("State file written: ", string(stdout))
 	}
 	return true
 }

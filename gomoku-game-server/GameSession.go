@@ -22,7 +22,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"math"
 	"strconv"
 )
@@ -204,7 +203,7 @@ func (gs *GameSession) BroadcastGameStart() {
 	var outPacketToBlack, outPacketToWhite [2 + 2 + MAX_SESSION_LEN + MAX_STRING_LEN]byte
 
 	if gs.mGameStatus != GS_STARTED {
-		log.Fatal("BroadcastGameStart Error Not GS_STARTED")
+		myLogger.Fatal("BroadcastGameStart Error Not GS_STARTED")
 	}
 
 	fmt.Println("BroadcastGameStart() gs.mPlayerBlack: ", gs.mPlayerBlack)

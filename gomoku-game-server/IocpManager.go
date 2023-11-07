@@ -20,7 +20,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"sync"
 )
@@ -42,20 +41,20 @@ func (i *IocpManager) StartAccept(gl *GameLiftManager) {
 	var wg sync.WaitGroup
 	var num_player_session int
 
-	log.Println("Listening client connection on port: ", i.mListenPort)
+	myLogger.Println("Listening client connection on port: ", i.mListenPort)
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", i.mListenPort))
 	if err != nil {
-		log.Fatal(err)
+		myLogger.Fatal(err)
 	}
 
 	for {
 		if num_player_session == 2 {
-			log.Print("All Players are joined. No longer accept additional player")
+			myLogger.Print("All Players are joined. No longer accept additional player")
 			break
 		}
 		conn, err := l.Accept()
 		if err != nil {
-			log.Fatal(err)
+			myLogger.Fatal(err)
 			continue
 		}
 

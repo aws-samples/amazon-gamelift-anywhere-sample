@@ -21,7 +21,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 
@@ -49,7 +48,7 @@ func (ps *PlayerSession) OnConnect(wg *sync.WaitGroup) bool {
 	// so that each session thread can retrive PlayerSession pointer when calling GetQueuedCompletionStatus in IOThread::DoIocpJob
 	// Let's Start goroutine here with PlayerSession pointer as argument
 
-	log.Print("Session OnConnect() implement this")
+	myLogger.Print("Session OnConnect() implement this")
 	ps.mConnected++
 
 	// Run go routine for communication with each player
@@ -65,11 +64,11 @@ func (ps *PlayerSession) Disconnect(dr DisconnectReason) {
 			return;
 	*/
 
-	log.Printf("[DEBUG] Client Disconnected: Reason=%d %s\n", dr, ps.mClientAddr.String())
+	myLogger.Printf("[DEBUG] Client Disconnected: Reason=%d %s\n", dr, ps.mClientAddr.String())
 
 	err := ps.mConn.(*net.TCPConn).SetLinger(0)
 	if err != nil {
-		log.Printf("Error when setting linger: %s", err)
+		myLogger.Printf("Error when setting linger: %s", err)
 	}
 
 	ps.OnDisconnect(dr)
@@ -132,7 +131,7 @@ func (ps *PlayerSession) PlayerReady(playerId string) {
 	if ps.mGameLiftManager.AcceptPlayerSession(ps, playerId) {
 		ps.mPlayerSessionId = playerId
 
-		log.Print("Implement PlayerSession  PlalyerReady(). Let's Call this from GameLiftManager module.")
+		myLogger.Print("Implement PlayerSession  PlalyerReady(). Let's Call this from GameLiftManager module.")
 
 		var err error
 		var cfg aws.Config
@@ -153,10 +152,10 @@ func (ps *PlayerSession) PlayerReady(playerId string) {
 		)
 
 		if err != nil {
-			log.Fatal(err.Error())
+			myLogger.Fatal(err.Error())
 		}
 
-		log.Print(*output.PlayerSessions[0].PlayerId)
+		myLogger.Print(*output.PlayerSessions[0].PlayerId)
 
 		/*
 			   /// Score info from GL
@@ -178,7 +177,7 @@ func (ps *PlayerSession) PlayerReady(playerId string) {
 		// TODO Skip FindScoreFromMatchData for now
 		//ps.mScore = ps.mGameLiftManager.FindScoreFromMatchData(ps.mPlayerName)
 
-		log.Print("[PLAYER] PlayerReady: ", playerId)
+		myLogger.Print("[PLAYER] PlayerReady: ", playerId)
 		ps.mGameLiftManager.CheckReadyAll()
 
 		return
@@ -193,7 +192,7 @@ func (ps *PlayerSession) PlayerExit(playerId string) {
 
 	ps.mPlayerSessionId = ""
 
-	log.Print("[PLAYER] PlayerExit: ", playerId)
+	myLogger.Print("[PLAYER] PlayerExit: ", playerId)
 
 	ps.Disconnect(DR_LOGOUT)
 }
@@ -220,7 +219,7 @@ func (ps *PlayerSession) GetPlayerScore() int {
 func checkError(err error) bool {
 	if err != nil {
 		// TODO for now avoid Fatal error which terminates the process
-		//log.Print("Fatal error: ", err.Error())
+		//myLogger.Print("Fatal error: ", err.Error())
 		return true
 	}
 	return false
