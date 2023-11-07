@@ -20,6 +20,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"github.com/google/uuid"
 	"log"
 	"os"
 )
@@ -27,11 +29,28 @@ import (
 var GGameLiftManager *GameLiftManager
 var myLogger *log.Logger
 
+func GetOrMakeProcessId() string {
+	val, ok := os.LookupEnv("GAMELIFT_SDK_PROCESS_ID")
+	if !ok {
+		return uuid.NewString()
+	} else {
+		return val
+	}
+}
+
 func main() {
 	var port int
 	var gamelift_endpoint, fleet_id, host_id string
 
-	fpLog, err := os.OpenFile("logfile.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	processId := GetOrMakeProcessId()
+	logFilePath := fmt.Sprintf("logs/%s.log", processId)
+
+	err := os.Mkdir("logs", 0750)
+	if err != nil && !os.IsExist(err) {
+		panic(err)
+	}
+
+	fpLog, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +64,7 @@ func main() {
 
 	myLogger.Print("GAMELIFT_SDK_WEBSOCKET_URL=", os.Getenv("GAMELIFT_SDK_WEBSOCKET_URL"))
 	myLogger.Print("GAMELIFT_SDK_AUTH_TOKEN=", os.Getenv("GAMELIFT_SDK_AUTH_TOKEN"))
-	myLogger.Print("GAMELIFT_SDK_PROCESS_ID=", os.Getenv("GAMELIFT_SDK_PROCESS_ID"))
+	myLogger.Print("GAMELIFT_SDK_PROCESS_ID=", processId)
 	myLogger.Print("GAMELIFT_SDK_HOST_ID=", os.Getenv("GAMELIFT_SDK_HOST_ID"))
 	myLogger.Print("GAMELIFT_SDK_FLEET_ID=", os.Getenv("GAMELIFT_SDK_FLEET_ID"))
 
@@ -72,7 +91,7 @@ func main() {
 		GGameLiftManager.SetSQSClientInfo("ap-northeast-2", sqs_endpoint, "")
 	}
 
-	GGameLiftManager.InitializeGameLift(port, gamelift_endpoint, fleet_id, host_id)
+	GGameLiftManager.InitializeGameLift(port, gamelift_endpoint, fleet_id, host_id, logFilePath)
 
 	GIocpManager := IocpManager{}
 

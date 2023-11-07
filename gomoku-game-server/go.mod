@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.22
 	github.com/aws/aws-sdk-go-v2/service/gamelift v1.18.1
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.20.9
+	github.com/google/uuid v1.4.0
 )
 
 require (
@@ -23,6 +24,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.18.10 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/sethvargo/go-retry v0.2.4 // indirect
 )

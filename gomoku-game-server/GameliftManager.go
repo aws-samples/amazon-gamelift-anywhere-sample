@@ -135,7 +135,7 @@ func (g *GameLiftManager) OnHealthCheck() bool {
 	return g.mActivated
 }
 
-func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint string, fleetId string, hostId string) bool {
+func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint string, fleetId string, hostId string, logPath string) bool {
 	var err error
 	var cfg aws.Config
 
