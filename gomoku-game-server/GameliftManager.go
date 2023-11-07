@@ -20,6 +20,7 @@ package main
 
 import (
 	"aws/amazon-gamelift-go-sdk/model"
+	"aws/amazon-gamelift-go-sdk/model/request"
 	"aws/amazon-gamelift-go-sdk/server"
 	"context"
 	"fmt"
@@ -323,6 +324,19 @@ func (g *GameLiftManager) RemovePlayerSession(psess *PlayerSession, playerSessio
 		myLogger.Print("[GAMELIFT] Terminate GameSession\n")
 		g.TerminateGameSession(37)
 	}
+}
+
+func (g *GameLiftManager) DescribePlayerSessions(playerSessionId string) (*model.PlayerSession, error) {
+	describePlayerSessionsRequest := request.NewDescribePlayerSessions()
+	describePlayerSessionsRequest.PlayerSessionID = playerSessionId
+
+	describePlayerSessionsResponse, err := server.DescribePlayerSessions(describePlayerSessionsRequest)
+	if err != nil {
+		myLogger.Print("[GAMELIFT] DescribePlayerSessions Failed: ", err.Error())
+		return nil, err
+	}
+
+	return &describePlayerSessionsResponse.PlayerSessions[0], nil
 }
 
 func (g *GameLiftManager) CheckReadyAll() {

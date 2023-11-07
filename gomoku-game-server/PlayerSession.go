@@ -19,14 +19,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"sync"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/gamelift"
 )
 
 type DisconnectReason int
@@ -127,57 +122,22 @@ func (ps *PlayerSession) IsValid() bool {
 	}
 }
 
-func (ps *PlayerSession) PlayerReady(playerId string) {
-	if ps.mGameLiftManager.AcceptPlayerSession(ps, playerId) {
-		ps.mPlayerSessionId = playerId
+func (ps *PlayerSession) PlayerReady(playerSessionId string) {
+	if ps.mGameLiftManager.AcceptPlayerSession(ps, playerSessionId) {
+		ps.mPlayerSessionId = playerSessionId
 
 		myLogger.Print("Implement PlayerSession  PlalyerReady(). Let's Call this from GameLiftManager module.")
 
-		var err error
-		var cfg aws.Config
-
-		ctx := context.TODO()
-
-		cfg, err = config.LoadDefaultConfig(ctx)
-		if err != nil {
-			panic("configuration error, " + err.Error())
-		}
-
-		svc := gamelift.NewFromConfig(cfg)
-
-		output, err := svc.DescribePlayerSessions(ctx,
-			&gamelift.DescribePlayerSessionsInput{
-				PlayerSessionId: &playerId,
-			},
-		)
-
+		playerSession, err := GGameLiftManager.DescribePlayerSessions(playerSessionId)
 		if err != nil {
 			myLogger.Fatal(err.Error())
 		}
 
-		myLogger.Print(*output.PlayerSessions[0].PlayerId)
+		myLogger.Print(playerSession.PlayerID)
 
-		/*
-			   /// Score info from GL
-			   Aws::GameLift::Server::Model::DescribePlayerSessionsRequest req;
-			   req.SetPlayerSessionId(mPlayerSessionId);
-			   auto outcome = Aws::GameLift::Server::DescribePlayerSessions(req);
-			   if (!outcome.IsSuccess())
-			   {
-			       GConsoleLog->PrintOut(true, "[PLAYER] DescribePlayerSessions Error : %s \n", outcome.GetError().GetErrorMessage().c_str());
-			       mScore = -1000;
-			       mPlayerName = std::string("nonamed");
-			       return;
-			   }
+		ps.mPlayerName = playerSession.PlayerID
 
-				ps.mPlayerName = outcome.GetResult().GetPlayerSessions()[0].GetPlayerId();
-		*/
-		ps.mPlayerName = *output.PlayerSessions[0].PlayerId
-
-		// TODO Skip FindScoreFromMatchData for now
-		//ps.mScore = ps.mGameLiftManager.FindScoreFromMatchData(ps.mPlayerName)
-
-		myLogger.Print("[PLAYER] PlayerReady: ", playerId)
+		myLogger.Print("[PLAYER] PlayerReady: ", playerSessionId)
 		ps.mGameLiftManager.CheckReadyAll()
 
 		return
@@ -187,12 +147,12 @@ func (ps *PlayerSession) PlayerReady(playerId string) {
 	ps.Disconnect(DR_UNAUTH)
 }
 
-func (ps *PlayerSession) PlayerExit(playerId string) {
-	ps.mGameLiftManager.RemovePlayerSession(ps, playerId)
+func (ps *PlayerSession) PlayerExit(playerSessionId string) {
+	ps.mGameLiftManager.RemovePlayerSession(ps, playerSessionId)
 
 	ps.mPlayerSessionId = ""
 
-	myLogger.Print("[PLAYER] PlayerExit: ", playerId)
+	myLogger.Print("[PLAYER] PlayerExit: ", playerSessionId)
 
 	ps.Disconnect(DR_LOGOUT)
 }
