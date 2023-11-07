@@ -155,7 +155,8 @@ export class GameLiftAnywhereStack extends cdk.Stack {
           'COST',
           'LATENCY'
         ]
-      }
+      },
+      timeoutInSeconds: 60
     });
 
     // Create a GameLift Matchmaking Config resource
