@@ -28,6 +28,8 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+
 export class ServerlessBackendStack extends cdk.Stack {
   public readonly matchmakingNotificationTopic: sns.Topic;
 
@@ -54,6 +56,14 @@ export class ServerlessBackendStack extends cdk.Stack {
       value: table.tableName
     });
 
+    // DynamoDB for custom accelerator port mapping
+    const portMappingTable = new dynamodb.Table(this, 'CustomPortMapping', {
+      tableName: 'CustomPortMapping',
+      partitionKey: { name: 'AcceleratorPort', type: dynamodb.AttributeType.NUMBER },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+    
     // GameLift Full Access Policy for various lambda functions
     const gameLiftFullAccessPolicy = new iam.ManagedPolicy(this, 'GomokuGameLiftManagedPolicy', {
       managedPolicyName: 'GameLiftFullAccess',
@@ -194,6 +204,36 @@ export class ServerlessBackendStack extends cdk.Stack {
 
     const matchstatusApi = gomokuApi.root.addResource('matchstatus');
     matchstatusApi.addMethod('POST', new apigateway.LambdaIntegration(gameMatchStatus, {
+      proxy: false,
+      integrationResponses: [{ statusCode: '200', }],
+      contentHandling: apigateway.ContentHandling.CONVERT_TO_TEXT
+    }), {
+      methodResponses: [{ statusCode: '200' }]
+    });
+    
+    // Lambda function for reloading custom port mappings to 'CustomPortMapping' dynamodb table
+    const reloadCustomPortMapping = new lambda.Function(this, 'reloadCustomPortMapping', {
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas')),
+      runtime: lambda.Runtime.PYTHON_3_11,
+      timeout: cdk.Duration.minutes(5),
+      handler: 'reload-custom-port-mapping.lambda_handler',
+      environment: {
+        TABLE_NAME: portMappingTable.tableName
+      }
+    });
+    //portMappingTable.grantReadWriteData(reloadCustomPortMapping);
+    portMappingTable.grantFullAccess(reloadCustomPortMapping);
+    
+    // allow lambda function to globalaccelerator:ListCustomRoutingPortMappings
+    const statement = new iam.PolicyStatement();
+    statement.addActions("globalaccelerator:ListCustomRoutingPortMappings");
+    const arn_string = "arn:aws:globalaccelerator::" + cdk.Stack.of(this).account + ":accelerator/*";
+    statement.addResources(arn_string);
+
+    reloadCustomPortMapping.addToRolePolicy(statement); 
+
+    const reloadcustomportmappingApi = gomokuApi.root.addResource('reloadcustomportmapping');
+    reloadcustomportmappingApi.addMethod('POST', new apigateway.LambdaIntegration(reloadCustomPortMapping, {
       proxy: false,
       integrationResponses: [{ statusCode: '200', }],
       contentHandling: apigateway.ContentHandling.CONVERT_TO_TEXT
