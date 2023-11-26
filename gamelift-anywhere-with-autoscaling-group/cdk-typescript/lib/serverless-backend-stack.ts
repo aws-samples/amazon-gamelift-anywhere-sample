@@ -59,7 +59,7 @@ export class ServerlessBackendStack extends cdk.Stack {
     // DynamoDB for custom accelerator port mapping
     const portMappingTable = new dynamodb.Table(this, 'CustomPortMapping', {
       tableName: 'CustomPortMapping',
-      partitionKey: { name: 'AcceleratorPort', type: dynamodb.AttributeType.NUMBER },
+      partitionKey: { name: 'DestinationIpAddress', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
@@ -116,10 +116,12 @@ export class ServerlessBackendStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'handle-matchmaking-event.lambda_handler',
       environment: {
-        TABLE_NAME: table.tableName
+        TABLE_NAME: table.tableName,
+        GLOBAL_ACCELERATOR_IP: this.node.tryGetContext('GlobalAcceleratorIp'),
       }
     });
     table.grantWriteData(gameMatchEvent);
+    portMappingTable.grantReadData(gameMatchEvent);
 
     matchmakingNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
 
