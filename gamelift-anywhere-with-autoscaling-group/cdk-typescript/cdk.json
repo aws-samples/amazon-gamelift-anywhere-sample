@@ -63,7 +63,7 @@
     "keyPairName": "enterYourKey",
     "MatchmakingConfigurationName": "MatchmakingConfiguration",
     "EndpointGroupArn": "",
-    "GlobalAcceleratorSubnetId": "",
+    "GlobalAcceleratorSecurityGroupId": "",
     "GlobalAcceleratorIp": ""
   }
 }

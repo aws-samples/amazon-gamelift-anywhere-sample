@@ -124,9 +124,9 @@ export class EcsFargateFleetStack extends cdk.Stack {
     
 
     const sg_service = new ec2.SecurityGroup(this, 'gomoku-demo-sg', { vpc: vpc });
-    const globalaccelerator_subnet_id = this.node.tryGetContext('GlobalAcceleratorSubnetId');
+    const globalaccelerator_securitygroup_id = this.node.tryGetContext('GlobalAcceleratorSecurityGroupId');
 
-    if(globalaccelerator_subnet_id.length === 0) { // Use public subnet 
+    if(globalaccelerator_securitygroup_id.length === 0) { // Use public subnet 
       sg_service.addIngressRule(ec2.Peer.ipv4('0.0.0.0/0'), ec2.Port.tcp(4000));
       
       const service = new ecs.FargateService(this, 'gomoku', {
@@ -142,7 +142,7 @@ export class EcsFargateFleetStack extends cdk.Stack {
       const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
     }
     else { // Use private subnet 
-      sg_service.addIngressRule(ec2.Peer.securityGroupId(globalaccelerator_subnet_id), ec2.Port.tcp(4000));
+      sg_service.addIngressRule(ec2.Peer.securityGroupId(globalaccelerator_securitygroup_id), ec2.Port.tcp(4000));
 
       const service = new ecs.FargateService(this, 'gomoku', {
         cluster,
