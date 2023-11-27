@@ -98,6 +98,8 @@ export class EcsFargateFleetStack extends cdk.Stack {
         "ec2:DescribeNetworkInterfaces",
         "ecs:GetTaskProtection",
         "ecs:UpdateTaskProtection",
+        "globalaccelerator:AllowCustomRoutingTraffic",
+				"globalaccelerator:DenyCustomRoutingTraffic",
       ]
     }));
 
@@ -110,7 +112,8 @@ export class EcsFargateFleetStack extends cdk.Stack {
         'PORT' : '4000',
         'LOCATION' : customLocation.locationName,
         'FLEET_ID' : fleet.attrFleetId,
-        'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint')
+        'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint'),
+        'ENDPOINT_GROUP_ARN' : this.node.tryGetContext('EndpointGroupArn'),
       },
       // ... other options here ...
     });
@@ -121,227 +124,38 @@ export class EcsFargateFleetStack extends cdk.Stack {
     
 
     const sg_service = new ec2.SecurityGroup(this, 'gomoku-demo-sg', { vpc: vpc });
+    const globalaccelerator_subnet_id = this.node.tryGetContext('GlobalAcceleratorSubnetId');
 
-    sg_service.addIngressRule(ec2.Peer.ipv4('0.0.0.0/0'), ec2.Port.tcp(4000));
+    if(globalaccelerator_subnet_id.length === 0) { // Use public subnet 
+      sg_service.addIngressRule(ec2.Peer.ipv4('0.0.0.0/0'), ec2.Port.tcp(4000));
+      
+      const service = new ecs.FargateService(this, 'gomoku', {
+        cluster,
+        taskDefinition: fargateTaskDefinition,
+        desiredCount: 5,
+        assignPublicIp: true,
+        securityGroups: [sg_service],
+        enableExecuteCommand: true,
+      });
+      
+      // Setup AutoScaling policy
+      const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
+    }
+    else { // Use private subnet 
+      sg_service.addIngressRule(ec2.Peer.securityGroupId(globalaccelerator_subnet_id), ec2.Port.tcp(4000));
 
-    const service = new ecs.FargateService(this, 'gomoku', {
-      cluster,
-      taskDefinition: fargateTaskDefinition,
-      desiredCount: 5,
-      assignPublicIp: true,
-      securityGroups: [sg_service],
-      enableExecuteCommand: true,
-    });
-
-
-  
-    // Setup AutoScaling policy
-    const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
-    
-    /*
-    scaling.scaleToTrackCustomMetric()
-    scaling.scaleOnCpuUtilization('CpuScaling', {
-      targetUtilizationPercent: 50,
-      scaleInCooldown: Duration.seconds(60),
-      scaleOutCooldown: Duration.seconds(60)
-    });
-    */
-    /*
-    const taskrole = new iam.Role(this, `ecs-taskrole-${this.stackName}`, {
-      roleName: `ecs-taskrole-${this.stackName}`,
-      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
-    });
-    */
-
-
-/*
-    const ecrRepo = new ecr.Repository(this, 'ecrRepo', {
-      repositoryName: 'gomoku'
-    });
-*/
-
-/*
-    const taskDef = new ecs.FargateTaskDefinition(this, "taskDefinition", {
-      family: 'gomoku',
-      taskRole: taskrole
-    });
-
-    const baseImage = 'public.ecr.aws/amazonlinux/amazonlinux:2022'
-    const container = taskDef.addContainer('flask-app', {
-      image: ecs.ContainerImage.fromRegistry(baseImage),
-      memoryLimitMiB: 512,
-      cpu: 256,
-      logging
-    });
-
-
-
-    cluster.addCapacity('hello-web', {
-      instanceType: new ec2.InstanceType("t2.small"),
-      desiredCapacity: 1, // 초기 instance 생성 개수
-      maxCapacity: 2,
-      minCapacity: 1,
-      // vpcSubnets : default > all private subnets.
-    });
-*/
-/*
-    // Create new IAM role for instances in the anywhere fleet
-    const anywhereFleetRole = new iam.Role(this, 'anywhere_fleet_role', {
-      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-      description: 'Allow EC2 instances to access Amazon GameLift',
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('GlobalAcceleratorFullAccess'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMPatchAssociation'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSQSFullAccess'),
-      ]
-    });
-
-    anywhereFleetRole.addToPolicy(new iam.PolicyStatement({
-      actions: [ 'gamelift:*' ],
-      resources: [ '*' ]
-    }));
-
-    anywhereFleetRole.addToPolicy(new iam.PolicyStatement({
-      actions: [
-        'autoscaling:CompleteLifecycleAction',
-        'autoscaling:DescribeAutoScalingInstances',
-        'autoscaling:SetInstanceProtection'
-      ],
-      resources: [ '*' ]
-    }));
-
-    const userDataString = fs.readFileSync(path.join(__dirname, '..', 'user_data.txt'), 'utf-8');
-    const userData = ec2.UserData.custom(userDataString);
-    const keyPairName = this.node.tryGetContext('keyPairName'); // get KeyPairName from cdk context "keypairname"
-
-    const launchTemplate = new ec2.LaunchTemplate(this, 'LaunchTemplate', {
-      launchTemplateName: `${this.stackName}-lt`,
-      securityGroup: sg,
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.LARGE),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
-      role: anywhereFleetRole,
-      keyName: keyPairName,
-      userData,
-      httpEndpoint: true,
-      instanceMetadataTags: true
-    });
-
-
-
-
-
-
-    // Create AutoScalingGroup for instances in the anywhere fleet
-    const selection = vpc.selectSubnets({ subnetType: ec2.SubnetType.PUBLIC });
-
-    new autoscaling.CfnAutoScalingGroup(this, 'ASG', {
-      capacityRebalance: true,
-      desiredCapacity: '1',
-      maxSize: '2',
-      minSize: '1',
-      autoScalingGroupName: `${this.stackName}-asg`,
-      vpcZoneIdentifier: vpc.publicSubnets.map(subnet => subnet.subnetId),
-      healthCheckType: 'EC2',
-      launchTemplate: {
-        version: launchTemplate.latestVersionNumber,
-        // the properties below are optional
-        launchTemplateId: launchTemplate.launchTemplateId,
-        launchTemplateName: launchTemplate.launchTemplateName,
-      },
-      metricsCollection: [{
-        granularity: '1Minute',
-        metrics: [
-          'GroupMinSize',
-					'GroupMaxSize',
-					'GroupDesiredCapacity',
-					'GroupInServiceCapacity',
-					'GroupInServiceCapacity',
-					'GroupPendingCapacity',
-					'GroupStandbyCapacity',
-					'GroupTerminatingCapacity',
-					'GroupTotalCapacity',
-					'GroupPendingInstances',
-					'GroupStandbyInstances',
-					'GroupTerminatingInstances',
-					'GroupTotalInstances',
-					'GroupInServiceInstances',
-					'GroupPendingInstances',
-					'GroupStandbyInstances',
-					'GroupTerminatingInstances',
-					'GroupTotalInstances',
-					'GroupInServiceInstances',
-					'GroupPendingInstances',
-					'GroupStandbyInstances',
-					'GroupTerminatingInstances',
-					'GroupTotalInstances',
-					'GroupInServiceInstances',
-					'GroupPendingInstances',
-					'GroupStandbyInstances',
-					'GroupTerminatingInstances',
-					'GroupTotalInstances',
-					'GroupInServiceInstances',
-					'GroupPendingInstances',
-					'GroupStandbyInstances',
-        ]
-      }],
-      tags: [{
-        key:               'FleetId',
-        value:             fleet.attrFleetId,
-        propagateAtLaunch: true,
-      }, {
-        key:               'GameLiftEndpoint',
-        value:             this.node.tryGetContext('GameLiftEndpoint'),
-        propagateAtLaunch: true,
-      }, {
-        key:               'ConcurrentExecutions',
-        value:             this.node.tryGetContext('ConcurrentExecutions'),
-        propagateAtLaunch: true,
-      }, {
-        key:               'GameServerFromPort',
-        value:             this.node.tryGetContext('GameServerFromPort'),
-        propagateAtLaunch: true,
-      }, {
-        key:               'Location',
-        value:             locationName,
-        propagateAtLaunch: true,
-      }, {
-      //   key:               'EndpointGroupArn',
-      //   value:             'arn:aws:globalaccelerator::394254462122:accelerator/a0d118ed-8cb4-4953-a9ea-529dad865084/listener/e3fc6956/endpoint-group/c16bb882000e',
-      //   propagateAtLaunch: true,
-      // }, {
-        key:               'BucketName',
-        value:             bucket.bucketName,
-        propagateAtLaunch: true,
-      }, {
-        key:               'AutoScalingGroupName',
-        value:             `${this.stackName}-asg`,
-        propagateAtLaunch: true,
-      }, {
-        key:               'Name',
-        value:             'gomoku-go-server',
-        propagateAtLaunch: true,
-      }]
-    });
-
-    new cloudwatch.Metric({
-      namespace: 'AWS/GameLift',
-      metricName: 'ActiveGameSessions',
-      //metricName: 'PercentAvailableGameSessions',
-      dimensionsMap: {
-        FleetId: fleet.attrFleetId,
-        Location: locationName
-      },
-      statistic: 'Average',
-      unit: cloudwatch.Unit.COUNT,
-    });
-
-    // const targetTrackingPolicy = new autoscaling.TargetTrackingScalingPolicy(this, 'GameLiftAnywhereDemoTargetTrackingScalingPolicy', {
-    //   autoScalingGroup: autoscaling.AutoScalingGroup.fromAutoScalingGroupName(this, 'ASGPolicy', autoscaling.AutoScalingGroupName),
-    //   estimatedInstanceWarmup: cdk.Duration.minutes(3),
-    //   targetValue: 0.7,
-    //   customMetric: targetMetrics
-    // });
-*/
+      const service = new ecs.FargateService(this, 'gomoku', {
+        cluster,
+        taskDefinition: fargateTaskDefinition,
+        desiredCount: 5,
+        assignPublicIp: false,
+        securityGroups: [sg_service],
+        enableExecuteCommand: true,
+        vpcSubnets: { subnets:vpc.privateSubnets },
+      });
+      
+      // Setup AutoScaling policy
+      const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
+    }
   }
 }

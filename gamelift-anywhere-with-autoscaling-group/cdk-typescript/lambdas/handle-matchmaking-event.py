@@ -3,6 +3,7 @@ import json
 import time
 import os
 import logging
+from os import environ
 
 logger = logging.getLogger()
 
@@ -15,6 +16,13 @@ expire_seconds = int(os.getenv('EXPIRE_SECONDS', '300'))
 dynamodb = boto3.resource('dynamodb', region_name=region_name)
 ddb_table = dynamodb.Table(table_name)
 
+accelerator_listener_ip = os.getenv('GLOBAL_ACCELERATOR_IP')
+if accelerator_listener_ip is not None and accelerator_listener_ip != "" :
+    ddb_table_customportmapping = dynamodb.Table('CustomPortMapping')
+    accelerator_listener_ip     = os.getenv('GLOBAL_ACCELERATOR_IP')
+else:
+    logger.debug("No GLOBAL_ACCELERATOR_IP environment variable")
+
 def lambda_handler(event, context):
     logger.debug(event)
 
@@ -24,6 +32,19 @@ def lambda_handler(event, context):
     if matchevent_status == 'MatchmakingSucceeded':
         matchId = sns_message['detail']['matchId']
         gamesession_info = sns_message['detail']['gameSessionInfo']
+        
+        if accelerator_listener_ip is not None and accelerator_listener_ip != "" :
+            ipaddr  = gamesession_info['ipAddress']
+            port    = gamesession_info['port']
+
+            result = ddb_table_customportmapping.get_item( Key= {'DestinationIpAddress' : ipaddr})
+            print("port mapped: ", result)
+        
+            if 'Item' in result :
+                gamesession_info['ipAddress']   = accelerator_listener_ip
+                gamesession_info['port']        = int(result['Item']['AcceleratorPort'])
+                logger.debug(json.dumps(gamesession_info, indent=2))
+        
         expireAt = int(time.time()) + expire_seconds
 
         with ddb_table.batch_writer() as batch:

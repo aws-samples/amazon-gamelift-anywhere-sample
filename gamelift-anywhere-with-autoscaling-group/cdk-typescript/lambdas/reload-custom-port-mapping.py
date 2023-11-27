@@ -54,21 +54,22 @@ def lambda_handler(event, context):
         region_name = 'us-west-2',
     )
     
+    truncateTable()
+    
     client_glaccel = boto3.client('globalaccelerator', config=my_config)
     
     try:
-      glaccel_response = client_glaccel.list_custom_routing_port_mappings(AcceleratorArn=globalaccelerator_arn)
-      logger.debug(glaccel_response)
-      portMappingList = glaccel_response['PortMappings']
-      index = 0
+      paginator = client_glaccel.get_paginator('list_custom_routing_port_mappings')
+      for page in paginator.paginate(AcceleratorArn=globalaccelerator_arn):
+        portMappingList = page['PortMappings']
+        logger.debug(f"portMappingList length: {len(portMappingList)}")
+        index = 0
 
-      truncateTable()
-        
-      with table.batch_writer() as batch:
-        for dic in portMappingList:
-          batch.put_item( Item={ 'AcceleratorPort': dic["AcceleratorPort"], 'EndpointGroupArn': dic["EndpointGroupArn"], 'EndpointId': dic["EndpointId"], 'DestinationSocketAddress.IpAddress': dic["DestinationSocketAddress"]["IpAddress"], 'DestinationSocketAddress.Port': dic["DestinationSocketAddress"]["Port"], 'Protocols': dic["Protocols"], 'DestinationTrafficState': dic["DestinationTrafficState"]})
-          index += 1
-        logger.debug("Total of uploaded items to DDB: %d", index)
+        with table.batch_writer() as batch:
+          for dic in portMappingList:
+            batch.put_item( Item={ 'AcceleratorPort': dic["AcceleratorPort"], 'EndpointGroupArn': dic["EndpointGroupArn"], 'EndpointId': dic["EndpointId"], 'DestinationIpAddress': dic["DestinationSocketAddress"]["IpAddress"], 'DestinationPort': dic["DestinationSocketAddress"]["Port"], 'Protocols': dic["Protocols"], 'DestinationTrafficState': dic["DestinationTrafficState"]})
+            index += 1
+          logger.debug("Total of uploaded items to DDB: %d", index)
       
     except ClientError as err:
       logger.debug(err)
