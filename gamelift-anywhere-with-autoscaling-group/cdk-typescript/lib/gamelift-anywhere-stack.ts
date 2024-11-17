@@ -99,7 +99,16 @@ export class GameLiftAnywhereStack extends cdk.Stack {
       description: 'Demo Anywhere Fleet',
       locations: [{
         location: locationName
-      }]
+      }],
+      runtimeConfiguration: {
+        serverProcesses: [
+          {
+            launchPath: '/local/game/gomoku-in-go',
+            concurrentExecutions: 1,
+            parameters: '--port 4000' // hardcoded to port 4000 for demo purpose only
+          }
+        ]
+      },
     });
     fleet.addDependency(customLocation);
 
