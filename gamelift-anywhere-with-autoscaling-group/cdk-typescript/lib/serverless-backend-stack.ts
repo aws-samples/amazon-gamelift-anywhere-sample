@@ -20,6 +20,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import { Peer, Port } from 'aws-cdk-lib/aws-ec2';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -27,6 +28,9 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as sns_subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as elasticache from 'aws-cdk-lib/aws-elasticache';
+import { CfnServerlessCache } from 'aws-cdk-lib/aws-elasticache';
+
 
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
@@ -63,7 +67,7 @@ export class ServerlessBackendStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
-    
+
     // GameLift Full Access Policy for various lambda functions
     const gameLiftFullAccessPolicy = new iam.ManagedPolicy(this, 'GomokuGameLiftManagedPolicy', {
       managedPolicyName: 'GameLiftFullAccess',
@@ -117,12 +121,13 @@ export class ServerlessBackendStack extends cdk.Stack {
       handler: 'handle-matchmaking-event.lambda_handler',
       environment: {
         TABLE_NAME: table.tableName,
+        PORT_MAPPING_TABLE_NAME: portMappingTable.tableName,
         GLOBAL_ACCELERATOR_IP: this.node.tryGetContext('GlobalAcceleratorIp'),
       }
     });
     table.grantWriteData(gameMatchEvent);
     portMappingTable.grantReadData(gameMatchEvent);
-
+    
     matchmakingNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
 
     // API Gateway
@@ -212,27 +217,27 @@ export class ServerlessBackendStack extends cdk.Stack {
     }), {
       methodResponses: [{ statusCode: '200' }]
     });
-    
+
     // Lambda function for reloading custom port mappings to 'CustomPortMapping' dynamodb table
     const reloadCustomPortMapping = new lambda.Function(this, 'reloadCustomPortMapping', {
       code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas')),
       runtime: lambda.Runtime.PYTHON_3_11,
       timeout: cdk.Duration.minutes(5),
       handler: 'reload-custom-port-mapping.lambda_handler',
+      memorySize: 7076,
       environment: {
-        TABLE_NAME: portMappingTable.tableName
+        PORT_MAPPING_TABLE_NAME: portMappingTable.tableName,
       }
     });
-    //portMappingTable.grantReadWriteData(reloadCustomPortMapping);
-    portMappingTable.grantFullAccess(reloadCustomPortMapping);
-    
-    // allow lambda function to globalaccelerator:ListCustomRoutingPortMappings
-    const statement = new iam.PolicyStatement();
-    statement.addActions("globalaccelerator:ListCustomRoutingPortMappings");
-    const arn_string = "arn:aws:globalaccelerator::" + cdk.Stack.of(this).account + ":accelerator/*";
-    statement.addResources(arn_string);
 
-    reloadCustomPortMapping.addToRolePolicy(statement); 
+    portMappingTable.grantWriteData(reloadCustomPortMapping);
+
+    reloadCustomPortMapping.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        'globalaccelerator:ListCustomRoutingPortMappings',
+      ],
+      resources: ['*'],
+    }));
 
     const reloadcustomportmappingApi = gomokuApi.root.addResource('reloadcustomportmapping');
     reloadcustomportmappingApi.addMethod('POST', new apigateway.LambdaIntegration(reloadCustomPortMapping, {

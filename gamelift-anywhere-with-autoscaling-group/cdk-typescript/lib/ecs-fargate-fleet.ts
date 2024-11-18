@@ -84,8 +84,8 @@ export class EcsFargateFleetStack extends cdk.Stack {
     });
 
     const fargateTaskDefinition = new ecs.FargateTaskDefinition(this, 'ApiTaskDefinition', {
-      memoryLimitMiB: 512,
-      cpu: 256,
+      memoryLimitMiB: 1024,
+      cpu: 512,
     });
 
     fargateTaskDefinition.addToExecutionRolePolicy(executionRolePolicy);
@@ -112,7 +112,7 @@ export class EcsFargateFleetStack extends cdk.Stack {
         'PORT' : '4000',
         'LOCATION' : customLocation.locationName,
         'FLEET_ID' : fleet.attrFleetId,
-        'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint'),
+        //'GAMELIFT_ENDPOINT' : this.node.tryGetContext('GameLiftEndpoint'),
         'ENDPOINT_GROUP_ARN' : this.node.tryGetContext('EndpointGroupArn'),
       },
       // ... other options here ...

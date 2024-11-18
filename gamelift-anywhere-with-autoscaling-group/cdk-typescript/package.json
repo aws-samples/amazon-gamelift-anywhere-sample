@@ -24,7 +24,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.421.0",
     "@aws-sdk/client-gamelift": "^3.421.0",
-    "aws-cdk-lib": "2.93.0",
+    "aws-cdk-lib": "2.164.0",
     "constructs": "^10.0.0",
     "redis": "^4.6.10",
     "source-map-support": "^0.5.21"

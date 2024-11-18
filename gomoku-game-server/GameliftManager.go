@@ -32,8 +32,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
-
-	"github.com/aws/aws-sdk-go-v2/service/gamelift"
 )
 
 type GameLiftManager struct {
@@ -152,7 +150,7 @@ func (g *GameLiftManager) OnHealthCheck() bool {
 
 func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint string, fleetId string, hostId string, logPath string) bool {
 	var err error
-
+/*
 	if (hostId != "") && (fleetId != "") {
 		myLogger.Print("InitializeGameLift in anywhere fleet mode")
 
@@ -183,6 +181,13 @@ func (g *GameLiftManager) InitializeGameLift(listenPort int, gameliftEndpoint st
 		//InitSDK establishes a local connection with GameLift's agent to enable further communication.
 		err = server.InitSDK(serverParameters)
 	}
+*/
+	// Initialize GameLift either in managed fleet mode or anywhere fleet mode with Amazon GameLift Agent
+	myLogger.Print("InitializeGameLift...")
+	serverParameters := server.ServerParameters{"", "", "", "", ""}
+
+	//InitSDK establishes a local connection with GameLift's agent to enable further communication.
+	err = server.InitSDK(serverParameters)
 
 	if err != nil {
 		myLogger.Print("InitSDK failed : ", err.Error())
