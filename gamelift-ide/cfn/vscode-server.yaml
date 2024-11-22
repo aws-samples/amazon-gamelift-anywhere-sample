@@ -84,6 +84,14 @@ Parameters:
     Type: Number
     Description: The port for the DevServer
     Default: 8081
+  GameLiftAgentVersion:
+    Type: String
+    Description: The version of Amazon GameLift Agent
+    Default: '1.0.1'
+    AllowedValues: [
+      '1.0.1', 
+      '1.0.2'
+    ]
   # AssetZipS3Path:
   #   Description: The S3 path holding the asset zip file to be copied into the home folder. To leave the empty, leave blank.
   #   Type: String
@@ -668,11 +676,12 @@ Resources:
                 - '#!/bin/bash'
                 - git clone https://github.com/aws/amazon-gamelift-agent.git
                 - cd amazon-gamelift-agent/
-                - export GAMELIFT_AGENT_VERSION=$(grep -m 1 '^# ' CHANGELOG.md | sed 's/^# \([0-9.]*\).*/{"version":"\1"}/' | jq -r .version)
-                - | 
-                  if [ "$GAMELIFT_AGENT_VERSION" = "1.0.1" ]; then
+                - !Sub git checkout git checkout ${GameLiftAgentVersion}
+                #- export GAMELIFT_AGENT_VERSION=$(grep -m 1 '^# ' CHANGELOG.md | sed 's/^# \([0-9.]*\).*/{"version":"\1"}/' | jq -r .version)
+                - !Sub | 
+                  if [ ${GameLiftAgentVersion} = "1.0.1" ]; then
                           echo "GAMELIFT_AGENT_VERSION is 1.0.1. Downloading patch for Amazon ECS metadata access..."
-                          
+
                           # URL of the patch file
                           PATCH_URL="https://patch-diff.githubusercontent.com/raw/aws/amazon-gamelift-agent/pull/14.patch"
                           
@@ -688,7 +697,7 @@ Resources:
                           fi
                           git apply 14.patch
                       else
-                          echo "GAMELIFT_AGENT_VERSION is not 1.0.1. Current version: $GAMELIFT_AGENT_VERSION"
+                          echo "GAMELIFT_AGENT_VERSION is not 1.0.1. Selected version: ${GameLiftAgentVersion}"
                           echo "Patch download not required"
                       fi
                 - |
