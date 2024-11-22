@@ -683,7 +683,10 @@ Resources:
                           echo "GAMELIFT_AGENT_VERSION is 1.0.1. Downloading patch for Amazon ECS metadata access..."
 
                           # URL of the patch file
-                          PATCH_URL="https://patch-diff.githubusercontent.com/raw/aws/amazon-gamelift-agent/pull/14.patch"
+                          PATCH_URLs=(
+                            "https://patch-diff.githubusercontent.com/raw/aws/amazon-gamelift-agent/pull/14.patch",
+                            "https://raw.githubusercontent.com/aws-samples/amazon-gamelift-anywhere-sample/gamelift-ide-cfn/gamelift-ide/gamelift-agent-private-patch/block_spot_healthcheck.patch"
+                          )
                           
                           # Download the patch file using curl
                           wget "$PATCH_URL"

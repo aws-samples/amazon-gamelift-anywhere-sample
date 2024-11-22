@@ -1,0 +1,13 @@
+diff --git a/src/com/amazon/gamelift/agent/Agent.java b/src/com/amazon/gamelift/agent/Agent.java
+index 0db7702..669f6c6 100644
+--- a/src/com/amazon/gamelift/agent/Agent.java
++++ b/src/com/amazon/gamelift/agent/Agent.java
+@@ -71,7 +71,7 @@ public class Agent {
+             // status is also Initializing.
+             heartbeatSender.start();
+             gameLiftAgentLogUploader.start();
+-            instanceTerminationMonitor.start();
++            //instanceTerminationMonitor.start();
+             gameProcessMonitor.start();
+ 
+             log.info("Finished initializing Websocket connection and async threads");
