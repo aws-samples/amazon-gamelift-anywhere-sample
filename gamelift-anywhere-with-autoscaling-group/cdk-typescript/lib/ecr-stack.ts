@@ -12,7 +12,7 @@ export class EcrStack extends cdk.Stack {
     const repository = new ecr.Repository(this, 'Repo', {
       repositoryName: 'gomoku-demo',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteImages: true
+      emptyOnDelete: true
     });
     
     this.repository = repository;
