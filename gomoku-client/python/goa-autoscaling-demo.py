@@ -71,7 +71,7 @@ def thread_function(client, i):
     time.sleep(1)
 
 
-gl_client = boto3.client('gamelift')
+gl_client = boto3.client('gamelift', region_name='ap-northeast-2')
 dynamodb = boto3.resource('dynamodb', region_name='ap-northeast-2')
 
 #ddb_table = dynamodb.Table('CbsGlobalAcceleratorMappings')
