@@ -797,11 +797,13 @@ Resources:
                   - ec2:ModifySecurityGroupRules
                   - ec2:UpdateSecurityGroupRuleDescriptionsIngress
                   - ec2:CreateSecurityGroup
+                  - ec2:DescribeSubnets
                   - ec2:DescribeSecurityGroupRules
                   - ec2:DescribeVpcs
                   - ec2:DescribeSecurityGroups
                   - ec2:CreateTags
                   - ec2:DescribeTags
+                  - application-autoscaling:PutScalingPolicy permission
                   - ecr:*
                   - ecs:*
                   - s3:*
@@ -838,6 +840,8 @@ Resources:
                   - apigateway:*
                   - compute-optimizer:*
                   - gamelift:*
+                  - globalaccelerator:*
+
 
   VSCodeInstanceProfile:
     Type: AWS::IAM::InstanceProfile
