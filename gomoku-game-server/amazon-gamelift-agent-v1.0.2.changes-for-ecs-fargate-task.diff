@@ -1,0 +1,243 @@
+diff --git a/pom.xml b/pom.xml
+index 82626d3..286d7b0 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -144,7 +144,11 @@
+             <version>3.12.4</version>
+             <scope>test</scope>
+         </dependency>
+-
++        <dependency>
++            <groupId>com.amazonaws</groupId>
++            <artifactId>aws-java-sdk-ecs</artifactId>
++            <version>1.12.780</version>
++        </dependency>
+     </dependencies>
+     <properties>
+         <!-- https://maven.apache.org/general.html#encoding-warning -->
+diff --git a/src/com/amazon/gamelift/agent/Agent.java b/src/com/amazon/gamelift/agent/Agent.java
+index 0db7702..56e5a0a 100644
+--- a/src/com/amazon/gamelift/agent/Agent.java
++++ b/src/com/amazon/gamelift/agent/Agent.java
+@@ -71,7 +71,7 @@ public class Agent {
+             // status is also Initializing.
+             heartbeatSender.start();
+             gameLiftAgentLogUploader.start();
+-            instanceTerminationMonitor.start();
++            //instanceTerminationMonitor.start(); // Do not run instanceTerminationMonitor on ECS Fargate task as it does not provide termination notices through metadata service endpoint
+             gameProcessMonitor.start();
+ 
+             log.info("Finished initializing Websocket connection and async threads");
+diff --git a/src/com/amazon/gamelift/agent/module/ConfigModule.java b/src/com/amazon/gamelift/agent/module/ConfigModule.java
+index 98c0780..f49d72b 100644
+--- a/src/com/amazon/gamelift/agent/module/ConfigModule.java
++++ b/src/com/amazon/gamelift/agent/module/ConfigModule.java
+@@ -15,6 +15,9 @@ import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+ import com.amazonaws.auth.EC2ContainerCredentialsProviderWrapper;
+ import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
+ import com.amazonaws.auth.InstanceProfileCredentialsProvider;
++import com.amazonaws.auth.ContainerCredentialsProvider;
++//import com.amazonaws.auth.credentials.ECSCredentialsEndpointProvider;
++
+ import com.google.gson.Gson;
+ import dagger.Module;
+ import dagger.Provides;
+@@ -262,7 +265,10 @@ public class ConfigModule {
+     @Named(GAMELIFT_CREDENTIALS)
+     public AWSCredentialsProvider provideGameLiftCredentials() {
+         final AWSCredentialsProvider specifiedProvider;
+-        if (GameLiftCredentials.INSTANCE_PROFILE.equals(gameLiftCredentials)) {
++        if (System.getenv("ECS_CONTAINER_METADATA_URI_V4") != null) {
++            log.info("Retrieving credentials from the ecs metadata");
++            specifiedProvider = new ContainerCredentialsProvider();
++	    } else if (GameLiftCredentials.INSTANCE_PROFILE.equals(gameLiftCredentials)) {
+             log.info("Retrieving credentials from the instance metadata");
+             specifiedProvider = InstanceProfileCredentialsProvider.getInstance();
+         } else if (GameLiftCredentials.ENVIRONMENT_VARIABLE.equals(gameLiftCredentials)) {
+diff --git a/src/com/amazon/gamelift/agent/process/GameProcessManager.java b/src/com/amazon/gamelift/agent/process/GameProcessManager.java
+index b72259e..7f3e318 100644
+--- a/src/com/amazon/gamelift/agent/process/GameProcessManager.java
++++ b/src/com/amazon/gamelift/agent/process/GameProcessManager.java
+@@ -29,6 +29,18 @@ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.ScheduledExecutorService;
+ import java.util.stream.Collectors;
+ 
++import java.util.Arrays;
++
++import com.amazonaws.AmazonServiceException;
++import com.amazonaws.services.ecs.AmazonECS;
++import com.amazonaws.services.ecs.AmazonECSClientBuilder;
++import com.amazonaws.services.ecs.model.UpdateTaskProtectionRequest;
++import com.amazonaws.services.ecs.model.UpdateTaskProtectionResult;
++import com.amazonaws.services.gamelift.AmazonGameLift;
++import com.amazonaws.services.gamelift.AmazonGameLiftClientBuilder;
++import com.amazonaws.services.gamelift.model.GameProperty;
++import com.amazonaws.services.gamelift.model.UpdateGameSessionRequest;
++
+ import static com.amazon.gamelift.agent.module.ConfigModule.OPERATING_SYSTEM;
+ import static com.amazon.gamelift.agent.module.ThreadingModule.GAME_SESSION_LOGS_UPLOAD_EXECUTOR;
+ 
+@@ -283,6 +295,59 @@ public class GameProcessManager {
+         final GameProcess gameProcess = gameProcessByUUID.get(processUuid);
+         if (gameProcess != null) {
+             gameProcess.setGameSessionId(gameSessionId);
++
++            // Enable task protection when game session is activated
++            try {
++                // Get the ECS task ID from environment variable
++                String taskId = System.getenv("TASKID");
++                String cluster = System.getenv("CLUSTER");
++                
++                if (taskId != null && cluster != null) {
++                    AmazonECS ecsClient = AmazonECSClientBuilder.defaultClient();
++                    
++                    UpdateTaskProtectionRequest protectionRequest = new UpdateTaskProtectionRequest()
++                        .withCluster(cluster)
++                        .withTasks(Arrays.asList(taskId))
++                        .withProtectionEnabled(true)
++                        // Protect for 1 hours (60 minutes)
++                        .withExpiresInMinutes(60);
++                    
++                    UpdateTaskProtectionResult result = ecsClient.updateTaskProtection(protectionRequest);
++                    
++                    // Log the protection status
++                    if (result.getProtectedTasks() != null && !result.getProtectedTasks().isEmpty()) {
++                        log.info("Task protection enabled for task: {} in cluster: {}", taskId, cluster);
++                    }
++                    
++                    if (result.getFailures() != null && !result.getFailures().isEmpty()) {
++                        log.error("Failed to enable task protection: {}", result.getFailures());
++                    }
++
++                    // Create GameProperty for compute ID
++                    GameProperty computeIdProperty = new GameProperty().withKey("computeId").withValue(taskId);
++
++                    // Create UpdateGameSession request
++                    UpdateGameSessionRequest updateRequest = new UpdateGameSessionRequest().withGameSessionId(gameSessionId).withGameProperties(computeIdProperty);
++
++                    // Create GameLift client
++                    AmazonGameLift gameLiftClient = AmazonGameLiftClientBuilder.defaultClient();
++
++                    // Call GameLift API to update the game session
++                    try {
++                        gameLiftClient.updateGameSession(updateRequest);
++                        log.info("Updated game session {} with compute ID {}", gameSessionId, taskId);
++                    } catch (AmazonServiceException e) {
++                        log.error("Failed to update game session with compute ID. Error: {}", e.getMessage(), e);
++                        // Continue with process status update even if update fails
++                    }
++                } else {
++                    log.warn("Unable to enable task protection - ECS_TASK_ID or ECS_CLUSTER environment variable not set");
++                }
++            } catch (Exception e) {
++                // Log the error but don't fail the game session activation
++                log.error("Error enabling task protection: {}", e.getMessage(), e);
++            }
++
+         } else {
+             throw new NotFoundException(String.format("Attempted to save game session ID for process with UUID [%s],"
+                     + " but no such process exists", processUuid));
+diff --git a/src/com/amazon/gamelift/agent/utils/EnvironmentHelper.java b/src/com/amazon/gamelift/agent/utils/EnvironmentHelper.java
+index a218a1c..39d3d9f 100644
+--- a/src/com/amazon/gamelift/agent/utils/EnvironmentHelper.java
++++ b/src/com/amazon/gamelift/agent/utils/EnvironmentHelper.java
+@@ -11,6 +11,18 @@ import lombok.extern.slf4j.Slf4j;
+ 
+ import java.util.Map;
+ 
++import com.fasterxml.jackson.databind.JsonNode;
++import com.fasterxml.jackson.databind.ObjectMapper;
++
++import java.net.URI;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.List;
++
++import java.net.http.HttpClient;
++import java.net.http.HttpRequest;
++import java.net.http.HttpResponse;
++
+ @Slf4j
+ public class EnvironmentHelper {
+     private static Map<String, String> getHostInfoFromEC2Metadata() throws AmazonClientException {
+@@ -23,12 +35,79 @@ public class EnvironmentHelper {
+                 EnvironmentConstants.AMI_ID, EC2MetadataUtils.getAmiId());
+     }
+ 
++    /**
++     * Utility method to log the current ECSMetadata
++     */
++    private static Map<String, String> getHostInfoFromECSMetadata() throws Exception {
++        String metadataEndpoint = System.getenv("ECS_CONTAINER_METADATA_URI_V4");
++        if (metadataEndpoint == null) {
++            throw new RuntimeException("ECS metadata endpoint not available");
++        }
++
++        HttpClient client = HttpClient.newHttpClient();
++        HttpRequest request = HttpRequest.newBuilder()
++                .uri(URI.create(metadataEndpoint + "/task"))
++                .build();
++
++        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
++
++        if (response.statusCode() != 200) {
++            throw new RuntimeException("Failed to retrieve ECS metadata: HTTP " + response.statusCode());
++        }
++
++        ObjectMapper mapper = new ObjectMapper();
++        JsonNode taskMetadata = mapper.readTree(response.body());
++
++        Map<String, String> hostInfo = new HashMap<>();
++        hostInfo.put(EnvironmentConstants.HOST_ID_KEY, taskMetadata.path("TaskARN").asText());
++        hostInfo.put(EnvironmentConstants.HOST_NAME_KEY, taskMetadata.path("Containers").get(0).path("Name").asText());
++        hostInfo.put(EnvironmentConstants.HOST_PUBLICIPV4_KEY, getPublicIpv4(taskMetadata));
++        hostInfo.put(EnvironmentConstants.HOST_INSTANCE_TYPE_KEY, "ECS_CONTAINER");
++        hostInfo.put(EnvironmentConstants.AMI_ID, taskMetadata.path("Containers").get(0).path("Image").asText());
++
++        return hostInfo;
++    }
++
++    private static String getPublicIpv4(JsonNode taskMetadata) {
++        List<String> privateIpPrefixes = Arrays.asList("10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
++                                                   "172.21.", "172.22.", "172.23.", "172.24.", "172.25.", "172.26.",
++                                                   "172.27.", "172.28.", "172.29.", "172.30.", "172.31.", "192.168.");
++
++        JsonNode networks = taskMetadata.path("Containers").get(0).path("Networks");
++        for (JsonNode network : networks) {
++            JsonNode ipv4Addresses = network.path("IPv4Addresses");
++            for (JsonNode ipv4 : ipv4Addresses) {
++                String ip = ipv4.asText();
++                if (!isPrivateIp(ip, privateIpPrefixes)) {
++                    return ip;
++                }
++            }
++        }
++        return "";
++    }
++
++    private static boolean isPrivateIp(String ip, List<String> privateIpPrefixes) {
++        for (String prefix : privateIpPrefixes) {
++	   if (ip.startsWith(prefix)) {
++	   	return true;
++	   }
++	}
++	return false;
++    }
++
+     /**
+      * Utility method to log the current EC2Metadata
+      */
+     public static void logEC2Metadata() {
+         try {
+-            final Map<String, String> hostInfo = getHostInfoFromEC2Metadata();
++            final Map<String, String> hostInfo;
++
++            if (System.getenv("ECS_CONTAINER_METADATA_URI_V4") != null) {
++                hostInfo = getHostInfoFromECSMetadata();
++            } else {
++                hostInfo = getHostInfoFromEC2Metadata();
++            }
++
+             log.info("EC2 metadata: "
+                             + "instanceId: {}, "
+                             + "instanceType: {}, "
