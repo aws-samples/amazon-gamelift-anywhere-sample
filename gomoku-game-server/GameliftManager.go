@@ -125,7 +125,8 @@ func (g *GameLiftManager) OnProcessTerminate() {
 	// such as notifying players, preserving game state data, and other cleanup
 	if g.mActivated {
 		myLogger.Print("[GAMELIFT] OnProcessTerminate Success\n")
-		g.TerminateGameSession(0xDEAD)
+		//g.TerminateGameSession(0xDEAD)
+		g.TerminateGameSession(0)
 	}
 }
 
@@ -294,7 +295,7 @@ func (g *GameLiftManager) RemovePlayerSession(psess *PlayerSession, playerSessio
 
 	if g.mGameSession.IsEnd() && g.mActivated {
 		myLogger.Print("[GAMELIFT] Terminate GameSession\n")
-		g.TerminateGameSession(37)
+		g.TerminateGameSession(0)
 	}
 }
 

@@ -2,14 +2,14 @@
 
 FROM ubuntu:22.04
 
-ENV AWS_CONFIG_FILE=/.aws/config
+#ENV AWS_CONFIG_FILE=/.aws/config
 
 RUN mkdir -p /local/game/logs
 RUN mkdir -p /local/game/agent
 
 WORKDIR /local/game
 
-COPY ./config $AWS_CONFIG_FILE
+#COPY ./config $AWS_CONFIG_FILE
 COPY ./gomoku-in-go /local/game/gomoku-in-go
 
 COPY ./GameLiftAgent-1.0.jar /local/game/agent/

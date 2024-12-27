@@ -32,6 +32,10 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import { GameLiftAnywhereStack } from './gamelift-anywhere-stack';
 
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+
 interface StackProps extends cdk.StackProps {
   vpc: ec2.Vpc;
   fleet: gamelift.CfnFleet;
@@ -139,7 +143,7 @@ export class EcsFargateFleetStack extends cdk.Stack {
       });
       
       // Setup AutoScaling policy
-      const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
+      const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 1 });
     }
     else { // Use private subnet 
       sg_service.addIngressRule(ec2.Peer.securityGroupId(globalaccelerator_securitygroup_id), ec2.Port.tcp(4000));
@@ -157,5 +161,94 @@ export class EcsFargateFleetStack extends cdk.Stack {
       // Setup AutoScaling policy
       const scaling = service.autoScaleTaskCount({ maxCapacity: 10, minCapacity: 5 });
     }
+
+    // Lambda function that handles the game result and update the player information
+
+    // Create IAM role for Lambda
+    const lambdaRole = new iam.Role(this, 'GameLiftScaleProtectionRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+    });
+
+
+    // Add custom policy for ECS permissions
+    lambdaRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'ecs:ListTasks',
+          'ecs:DescribeTasks',
+          'ecs:UpdateTaskProtection',
+          'ecs:GetTaskProtection', 
+        ],
+        resources: ['*'],
+      })
+    );
+
+    // Add custom policy for GameLift permissions
+    lambdaRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'gamelift:DescribeGameSessions',
+        ],
+        resources: ['*'],
+      })
+    );
+
+    const CheckIdleTask = new lambda.Function(this, 'CheckIdleTask', {
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas')),
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'check-idle-task.lambda_handler',
+      role: lambdaRole,
+      environment: {
+        ECS_CLUSTER_NAME: cluster.clusterName,
+        GAMELIFT_FLEET_ID: fleet.attrFleetId,
+        GAMELIFT_LOCATION : customLocation.locationName,
+      },
+      timeout: cdk.Duration.seconds(10),
+    });
+
+    // Create EventBridge rule to trigger Lambda every minute
+    new events.Rule(this, 'GameLiftIdleTaskCheckRule', {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
+      targets: [new targets.LambdaFunction(CheckIdleTask)],
+    });
+
+      // In your ECS Fargate Fleet Stack
+    const taskTerminationHandler = new lambda.Function(this, 'TaskTerminationHandler', {
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambdas')),
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'task-termination-handler.lambda_handler',
+      environment: {
+        GAMELIFT_FLEET_ID: fleet.attrFleetId,
+        GAMELIFT_LOCATION: customLocation.locationName
+      },
+      timeout: cdk.Duration.seconds(30)
+    });
+
+    // Add GameLift permissions to Lambda
+    taskTerminationHandler.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'gamelift:DeregisterCompute'
+      ],
+      resources: ['*']
+    }));
+
+    // Create EventBridge rule
+    new events.Rule(this, 'TaskTerminationRule', {
+      eventPattern: {
+        source: ['aws.ecs'],
+        detailType: ['ECS Task State Change'],
+        detail: {
+          lastStatus: ['STOPPED'],
+          clusterArn: [cluster.clusterArn],
+        }
+      },
+      targets: [new targets.LambdaFunction(taskTerminationHandler)]
+    });
+
   }
+
 }

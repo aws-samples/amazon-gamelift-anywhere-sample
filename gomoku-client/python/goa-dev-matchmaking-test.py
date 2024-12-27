@@ -71,7 +71,7 @@ def thread_function(client, i):
     time.sleep(1)
 
 
-gl_client = boto3.client('gamelift')
+gl_client = boto3.client('gamelift', region_name='ap-northeast-2')
 
 #playerAttr = {'score': {'N': 1000 }}
 numOfConnected = 0
@@ -96,8 +96,8 @@ for i in range (numOfPlayers):
   )
   print("[player", i, "] start_matchmaking sent to Client Backend Service.")
   clients[i]['ticketId'] = match_response['MatchmakingTicket']['TicketId']
-  #print("ticketID:", clients[i]['ticketId'])
-  time.sleep(0.1)
+  print("ticketID:", clients[i]['ticketId'])
+  time.sleep(0.3)
 
 time.sleep(1)
 
@@ -108,7 +108,7 @@ while numOfConnected < numOfPlayers :
       match_response = gl_client.describe_matchmaking( TicketIds = [ clients[i]['ticketId']])
       match_ticket = match_response['TicketList'][0]
       clients[i]['TicketStatus'] = match_ticket['Status']
-      #print(match_response)
+      print(match_response)
       if clients[i]['TicketStatus'] == 'COMPLETED':
         clients[i]['ipaddr']       = match_ticket['GameSessionConnectionInfo']['IpAddress']
         clients[i]['port']         = match_ticket['GameSessionConnectionInfo']['Port']

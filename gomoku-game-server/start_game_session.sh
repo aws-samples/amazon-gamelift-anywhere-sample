@@ -1,8 +1,8 @@
 #!/bin/bash
 
-REGION=`curl -s ${ECS_CONTAINER_METADATA_URI_V4}/task | jq '.Cluster' | cut -d':' -f4`
-TASKID=`curl -s ${ECS_CONTAINER_METADATA_URI_V4}/task | jq -r '.TaskARN' | cut -d'/' -f3`
-CLUSTER=`curl -s ${ECS_CONTAINER_METADATA_URI_V4}/task | jq -r '.TaskARN' | cut -d'/' -f2`
+export REGION=`curl -s ${ECS_CONTAINER_METADATA_URI_V4}/task | jq '.Cluster' | cut -d':' -f4`
+export TASKID=`curl -s ${ECS_CONTAINER_METADATA_URI_V4}/task | jq -r '.TaskARN' | cut -d'/' -f3`
+export CLUSTER=`curl -s ${ECS_CONTAINER_METADATA_URI_V4}/task | jq -r '.TaskARN' | cut -d'/' -f2`
 
 # Populate environment variable if not ECS task environment
 if [[ -z "$REGION" ]]; then
@@ -40,8 +40,9 @@ echo "Task IP address is $IPADDRESS"
 # LOCATION : custom location for the anywhere fleet
 # FLEET_ID : anywhere fleet id
 # PORT : game server port
-
+export GAMELIFT_ENABLE_COMPUTE_REGISTRATION_VIA_AGENT=true
+export AWS_JAVA_V1_DISABLE_DEPRECATION_ANNOUNCEMENT=true
 # Use aws gamelift update-runtime-configuration to configure gameserver execution path, concurrent executions, port
-nohup java -jar agent/GameLiftAgent-1.0.jar -fleet-id $FLEET_ID -compute-name $TASKID-$DATE -region $REGION -location $LOCATION -ip $IPADDRESS &
+nohup java -jar agent/GameLiftAgent-1.0.jar -fleet-id $FLEET_ID -compute-name $TASKID -region $REGION -location $LOCATION -ip $IPADDRESS &
 
 tail -f /dev/null
