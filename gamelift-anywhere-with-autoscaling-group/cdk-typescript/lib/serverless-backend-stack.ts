@@ -125,9 +125,20 @@ export class ServerlessBackendStack extends cdk.Stack {
         GLOBAL_ACCELERATOR_IP: this.node.tryGetContext('GlobalAcceleratorIp'),
       }
     });
+
+    gameMatchEvent.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'globalaccelerator:AllowCustomRoutingTraffic',
+      ],
+      resources: [
+        `arn:aws:globalaccelerator::${this.account}:accelerator/*`
+      ]
+    }));
+
     table.grantWriteData(gameMatchEvent);
     portMappingTable.grantReadData(gameMatchEvent);
-    
+
     matchmakingNotificationTopic.addSubscription(new sns_subscriptions.LambdaSubscription(gameMatchEvent));
 
     // API Gateway

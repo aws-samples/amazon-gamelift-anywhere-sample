@@ -54,9 +54,9 @@ def lambda_handler(event, context):
                 # Allow custom routing traffic on the global acceleration port. Note that this needs to be disallow when the player session is closed.
                 ga_client.allow_custom_routing_traffic(
                         EndpointGroupArn=result['Item']['EndpointGroupArn'],
-                        EndpointIdentities=[{'EndpointId': result['Item']['EndpointId']}],
-                        DestinationAddresses=accelerator_listener_ip,
-                        DestinationPorts= int(result['Item']['AcceleratorPort'])
+                        EndpointId=result['Item']['EndpointId'],
+                        DestinationAddresses=[ipaddr],
+                        DestinationPorts= [port]
                 )
 
                 logger.debug(json.dumps(gamesession_info, indent=2))

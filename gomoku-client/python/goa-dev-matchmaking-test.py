@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
 
-import boto3
+import requests
 import uuid
 import time
 import socket
 import struct
 import threading
+import json
+import os
+from urllib.parse import urljoin
 
-numOfPlayers = 2
-matchmakingConfigName="MatchmakingConfiguration"
+# Get API Gateway URL from environment variable
+try:
+    api_base_url = os.environ['API_GATEWAY_URL']
+except KeyError:
+    raise EnvironmentError(
+        "API_GATEWAY_URL environment variable is not set. "
+        "Please set it using: export API_GATEWAY_URL='https://your-api-gateway-id.execute-api.region.amazonaws.com/prod'"
+    )
 
+# Construct endpoint URLs
+match_request_url = urljoin(api_base_url, 'matchrequest')
+match_status_url = urljoin(api_base_url, 'matchstatus')
+
+numOfPlayers = 8
 clients = [] # List of client
 threads = []
 
@@ -39,7 +53,8 @@ def thread_function(client, i):
   sock.connect(addr)
   print('[player', i, '] connected to game server')
 
-  var = struct.pack('hh128s', PKT_CS_START_SIZE, PKT_CS_START, bytes(str(client['sessionId']['PlayerSessionId']), encoding='utf-8'))
+  var = struct.pack('hh128s', PKT_CS_START_SIZE, PKT_CS_START, 
+      bytes(str(client['sessionId']), encoding='utf-8'))
   #print(var)
   sock.send(var);
   print('[player', i, '] StartRequest sent to game server')
@@ -56,7 +71,8 @@ def thread_function(client, i):
   t = 0 
   while t < 30:
     if is_exiting == True: 
-      var = struct.pack('hh128s', PKT_CS_EXIT_SIZE, PKT_CS_EXIT, bytes(str(client['sessionId']['PlayerSessionId']), encoding='utf-8'))
+      var = struct.pack('hh128s', PKT_CS_EXIT_SIZE, PKT_CS_EXIT, 
+            bytes(str(client['sessionId']), encoding='utf-8'))
       sock.send(var);
       print('[player', i, '] ExitRequest sent to game server')
       sock.close
@@ -64,77 +80,106 @@ def thread_function(client, i):
 
     t = t + 1
     if t == 30 : # send ClientPing every 30 sec.
-      #var = struct.pack('hh128s', PKT_CS_PING_SIZE , PKT_CS_PING, bytes(str(client['sessionId']['PlayerSessionId']), encoding='utf-8'))
+      #var = struct.pack('hh128s', PKT_CS_PING_SIZE , PKT_CS_PING, bytes(str(client['sessionId']), encoding='utf-8'))
       #sock.send(var);
       print('[player', i,'] ClientPing sent to server skipped...')
       t = 0
     time.sleep(1)
 
+def main():
+  global is_exiting
 
-gl_client = boto3.client('gamelift', region_name='ap-northeast-2')
+  numOfConnected = 0
 
-#playerAttr = {'score': {'N': 1000 }}
-numOfConnected = 0
-
-# Initialize game client attributes
-for i in range (numOfPlayers):
-  client = {}
-
-  client['playerId'] = uuid.uuid4()
-  client['TicketStatus'] = 'IDLE'
-  client['ticketId'] = ''
-  client['playerAttr'] = {'score': {'N': 1000 }}
-  client['ipaddr'] = ''
-  client['port'] = 0
-  clients.append(client)
-  
-# Start Matchmaking request
-for i in range (numOfPlayers):
-  match_response = gl_client.start_matchmaking(
-    ConfigurationName = matchmakingConfigName,
-    Players = [ { 'PlayerId' : str(clients[i]['playerId']), 'PlayerAttributes' : clients[i]['playerAttr'] } ]
-  )
-  print("[player", i, "] start_matchmaking sent to Client Backend Service.")
-  clients[i]['ticketId'] = match_response['MatchmakingTicket']['TicketId']
-  print("ticketID:", clients[i]['ticketId'])
-  time.sleep(0.3)
-
-time.sleep(1)
-
-# Wait until all matchmaking requests succeeded with 'COMPLETED'
-while numOfConnected < numOfPlayers :
+  # Initialize game client attributes
   for i in range (numOfPlayers):
-    if clients[i]['TicketStatus'] != 'COMPLETED': 
-      match_response = gl_client.describe_matchmaking( TicketIds = [ clients[i]['ticketId']])
-      match_ticket = match_response['TicketList'][0]
-      clients[i]['TicketStatus'] = match_ticket['Status']
-      print(match_response)
-      if clients[i]['TicketStatus'] == 'COMPLETED':
-        clients[i]['ipaddr']       = match_ticket['GameSessionConnectionInfo']['IpAddress']
-        clients[i]['port']         = match_ticket['GameSessionConnectionInfo']['Port']
-        clients[i]['sessionId']    = match_ticket['GameSessionConnectionInfo']['MatchedPlayerSessions'][0]
-        print("[player", i, "][score:", clients[i]['playerAttr']['score']['N'], "] match created: ", clients[i]['ipaddr'], clients[i]['port'])
+    client = {}
 
-        numOfConnected = numOfConnected + 1
-      else: 
-        print("[player", i, "][score:", clients[i]['playerAttr']['score']['N'], "] matchmaking status: ", clients[i]['TicketStatus'])
-      time.sleep(1)
-
-# Start thread for each client to communicate with game server 
-for i in range (numOfPlayers):
-  try: 
-    t = threading.Thread(target = thread_function, args = (clients[i], i))
-    t.start()
-    threads.append(t)
-  except:
-    print('error: unable to start thread')
-
-time.sleep(1)
-input("Please enter any key to terminate game sessions: \n")
-is_exiting = True
-
-for i, t in enumerate(threads) :
-  t.join()
-  print('[player', i, '] thread done')
+    client['playerName'] = f"Player{i+1}"
+    client['TicketStatus'] = 'IDLE'
+    client['ticketId'] = ''
+    client['playerAttr'] = {'score': {'N': 1000 }}
+    client['ipaddr'] = ''
+    client['port'] = 0
+    clients.append(client)
     
-print("Exiting...")
+  # Start Matchmaking request
+  for i in range (numOfPlayers):
+    match_request_payload = {
+      "PlayerName": clients[i]['playerName']
+    }
+
+    try:
+      match_response = requests.post(
+        match_request_url,
+        json=match_request_payload,
+        headers={'Content-Type': 'application/json'}
+      )
+            
+      match_response.raise_for_status()
+      response_data = match_response.json()
+      clients[i]['ticketId'] = response_data['TicketId']
+      print("[player", i, "] matchmaking request sent via API Gateway. ticketId :",clients[i]['ticketId'])
+      
+      time.sleep(0.3)
+    except requests.exceptions.RequestException as e:
+      print(f"API request failed for player {i}: {str(e)}")
+
+  time.sleep(1)
+
+  # Wait until all matchmaking requests succeeded with 'COMPLETED'
+  while numOfConnected < numOfPlayers :
+    for i in range (numOfPlayers):
+      if clients[i]['TicketStatus'] != 'COMPLETED':
+          match_status_payload = {
+            "PlayerName": clients[i]['playerName'],
+            "TicketId": clients[i]['ticketId']
+          }
+
+          try:
+            match_response = requests.post(
+              match_status_url,
+              json=match_status_payload,
+              headers={'Content-Type': 'application/json'}
+            )
+
+            match_response.raise_for_status()
+            response_data = match_response.json()
+
+            if(response_data['IpAddress'] != '' and response_data['Port'] != 0):
+              clients[i]['TicketStatus'] = 'COMPLETED'
+              clients[i]['ipaddr']       = response_data['IpAddress']
+              clients[i]['port']         = response_data['Port']
+              clients[i]['sessionId']     = response_data['PlayerSessionId']
+              print("[player", i, "] match created. ipaddr: ", clients[i]['ipaddr'], " port: ", clients[i]['port'], " sessionId : ", clients[i]['sessionId'])
+
+              numOfConnected = numOfConnected + 1
+            else:
+              print("[player", i, "] matchmaking status: not completed ")
+
+          except requests.exceptions.RequestException as e:
+            print(f"Status check failed for player {i}: {str(e)}")
+ 
+          time.sleep(1)
+
+  # Start thread for each client to communicate with game server 
+  for i in range (numOfPlayers):
+    try: 
+      t = threading.Thread(target = thread_function, args = (clients[i], i))
+      t.start()
+      threads.append(t)
+    except:
+      print('error: unable to start thread')
+
+  time.sleep(1)
+  input("Please enter any key to terminate game sessions: \n")
+  is_exiting = True
+
+  for i, t in enumerate(threads) :
+    t.join()
+    print('[player', i, '] thread done')
+      
+  print("Exiting...")
+
+if __name__ == "__main__":
+    main()
